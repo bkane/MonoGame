@@ -145,7 +145,7 @@ namespace Microsoft.Xna.Framework.Content
             {
                 // Use Path.GetFullPath to help resolve relative directories
                 string fullRootPath = Path.GetFullPath(contentManager.RootDirectory);
-                string fullAssetPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(assetName), externalAssetName));
+                string fullAssetPath = Path.GetFullPath(Path.Combine(contentManager.RootDirectory, Path.Combine(Path.GetDirectoryName(assetName), externalAssetName)));
                 externalAssetName = fullAssetPath.Substring(fullRootPath.Length + 1);
                 return contentManager.Load<T>(externalAssetName);
             }
