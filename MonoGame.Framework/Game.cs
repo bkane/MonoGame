@@ -549,18 +549,18 @@ namespace Microsoft.Xna.Framework
 
             private Predicate<T> _filter;
             private Comparison<T> _sort;
-            private Action<T, EventHandler> _filterChangedSubscriber;
-            private Action<T, EventHandler> _filterChangedUnsubscriber;
-            private Action<T, EventHandler> _sortChangedSubscriber;
-            private Action<T, EventHandler> _sortChangedUnsubscriber;
+            private Action<T, EventHandler<EventArgs>> _filterChangedSubscriber;
+            private Action<T, EventHandler<EventArgs>> _filterChangedUnsubscriber;
+            private Action<T, EventHandler<EventArgs>> _sortChangedSubscriber;
+            private Action<T, EventHandler<EventArgs>> _sortChangedUnsubscriber;
 
             public SortingFilteringCollection(
                 Predicate<T> filter,
-                Action<T, EventHandler> filterChangedSubscriber,
-                Action<T, EventHandler> filterChangedUnsubscriber,
+                Action<T, EventHandler<EventArgs>> filterChangedSubscriber,
+                Action<T, EventHandler<EventArgs>> filterChangedUnsubscriber,
                 Comparison<T> sort,
-                Action<T, EventHandler> sortChangedSubscriber,
-                Action<T, EventHandler> sortChangedUnsubscriber)
+                Action<T, EventHandler<EventArgs>> sortChangedSubscriber,
+                Action<T, EventHandler<EventArgs>> sortChangedUnsubscriber)
             {
                 _items = new List<T>();
                 _addJournal = new List<T>();
