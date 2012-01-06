@@ -153,7 +153,8 @@ namespace Microsoft.Xna.Framework.Content
                 }
                 else
                 {
-                    if (field.IsPrivate == false) field.SetValue(parent, obj2);
+                    //if (field.IsPrivate == false) 
+					field.SetValue(parent, obj2);
                 }
             }
             else
