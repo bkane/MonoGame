@@ -82,6 +82,12 @@ namespace Microsoft.Xna.Framework
             elapsedTime = totalTime = TimeSpan.Zero;
         }
 		
+		public GameTime ( TimeSpan totalGameTime, TimeSpan elapsedGameTime )
+		{
+			this.totalTime = totalGameTime;
+			this.elapsedTime = elapsedGameTime;
+		}
+		
 		public GameTime ( TimeSpan totalRealTime, TimeSpan elapsedRealTime, TimeSpan totalGameTime, TimeSpan elapsedGameTime )
 		{
 			
