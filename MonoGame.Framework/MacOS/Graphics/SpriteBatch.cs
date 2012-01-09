@@ -81,15 +81,15 @@ namespace Microsoft.Xna.Framework.Graphics
 				if (graphicsDevice.Textures._textures.Count > 0) {
 					foreach (EffectParameter ep in _effect._textureMappings) {
 						// if user didn't inform the texture index, we can't bind it
-						if (ep.UserInedx == -1)
+						if (ep.UserIndex == -1)
 							continue;
 
-						Texture tex = graphicsDevice.Textures [ep.UserInedx];
+						Texture tex = graphicsDevice.Textures [ep.UserIndex];
 
 						// Need to support multiple passes as well
-						GL.ActiveTexture ((TextureUnit)((int)TextureUnit.Texture0 + ep.UserInedx));
+						GL.ActiveTexture ((TextureUnit)((int)TextureUnit.Texture0 + ep.UserIndex));
 						GL.BindTexture (TextureTarget.Texture2D, tex._textureId);
-						GL.Uniform1 (ep.UniformLocation, ep.UserInedx);
+						GL.Uniform1 (ep.UniformLocation, ep.UserIndex);
 					}
 				}
 			}
@@ -114,6 +114,8 @@ namespace Microsoft.Xna.Framework.Graphics
 //			}
 			graphicsDevice.BlendState = _blendState;
 			graphicsDevice.SetGraphicsStates();
+			
+			
 			// set camera
 			GL.MatrixMode (MatrixMode.Projection);
 			GL.LoadIdentity ();		
@@ -147,12 +149,14 @@ namespace Microsoft.Xna.Framework.Graphics
 					break;
 				}
 			}
+			
 
 			// Enable Scissor Tests if necessary
 			if (this.graphicsDevice.RasterizerState.ScissorTestEnable) {
 				GL.Enable (EnableCap.ScissorTest);				
 			}
-
+			
+			
 			GL.MatrixMode (MatrixMode.Modelview);
 
 			GL.Viewport (0, 0, this.graphicsDevice.Viewport.Width, this.graphicsDevice.Viewport.Height);
@@ -162,7 +166,8 @@ namespace Microsoft.Xna.Framework.Graphics
 				GL.Scissor (this.graphicsDevice.ScissorRectangle.X, this.graphicsDevice.ScissorRectangle.Y, this.graphicsDevice.ScissorRectangle.Width, this.graphicsDevice.ScissorRectangle.Height);
 			}
 
-			GL.LoadMatrix (ref _matrix.M11);
+			//GL.LoadMatrix (ref _matrix.M11);
+			
 
 			// Initialize OpenGL states (ideally move this to initialize somewhere else)
 			GLStateManager.SetDepthStencilState(_depthStencilState);
@@ -179,7 +184,10 @@ namespace Microsoft.Xna.Framework.Graphics
 			GL.Enable (EnableCap.CullFace);
 			GL.FrontFace (FrontFaceDirection.Cw);
 			GL.Color4 (1.0f, 1.0f, 1.0f, 1.0f);
-
+			
+			int program = -1;
+			GL.GetInteger(GetPName.CurrentProgram, out program);
+			
 			_batcher.DrawBatch (_sortMode, _samplerState);
 	
 			// Disable Scissor Tests if necessary

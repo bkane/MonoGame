@@ -29,7 +29,6 @@ namespace Microsoft.Xna.Framework.Graphics
 		Matrix world = Matrix.Identity;
 		Matrix view = Matrix.Identity;
 		Matrix projection = Matrix.Identity;
-		Matrix worldView;
 
 		Vector3 diffuseColor = Vector3.One;
 		Vector3 emissiveColor = Vector3.Zero;
@@ -318,10 +317,8 @@ namespace Microsoft.Xna.Framework.Graphics
 
 				PSArray[0] = CreateFragmentShaderFromSource (PSBasicEffect.PSBasic);
 				PSArray[1] = CreateFragmentShaderFromSource (PSBasicEffect.PSBasicNoFog);
-//				PSArray[2] = CreateFragmentShaderFromSource (PSBasicEffect.PSBasicVc);
-//				PSArray[3] = CreateFragmentShaderFromSource (PSBasicEffect.PSBasicVcNoFog);
-				PSArray[3] = CreateFragmentShaderFromSource (PSBasicEffect.PSBasicTx);
-				PSArray[4] = CreateFragmentShaderFromSource (PSBasicEffect.PSBasicTxNoFog);
+				PSArray[2] = CreateFragmentShaderFromSource (PSBasicEffect.PSBasicTx);
+				PSArray[3] = CreateFragmentShaderFromSource (PSBasicEffect.PSBasicTxNoFog);
 
 			}
 
@@ -423,7 +420,6 @@ namespace Microsoft.Xna.Framework.Graphics
 		}
 
 		int oldIndex = 0;
-		int shaderIndex = 0;
 
 		int[] VSIndices = new int[32]
 		{
@@ -546,10 +542,6 @@ namespace Microsoft.Xna.Framework.Graphics
 //			}
 
 
-			// These are the states that work
-			GLStateManager.Projection(Projection);
-			GLStateManager.WorldView(world, view);
-
 			// Override this for now for testing purposes
 			dirtyFlags |= EffectDirtyFlags.World | EffectDirtyFlags.WorldViewProj;
 			dirtyFlags |= EffectDirtyFlags.WorldViewProj | EffectDirtyFlags.EyePosition;
@@ -560,7 +552,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			GLStateManager.ColorArray(VertexColorEnabled);
 
 			// Recompute the world+view+projection matrix or fog vector?
-			dirtyFlags = EffectHelpers.SetWorldViewProjAndFog (dirtyFlags, ref world, ref view, ref projection, ref worldView, fogEnabled, fogStart, fogEnd, worldViewProjParam, fogVectorParam);
+			dirtyFlags = EffectHelpers.SetWorldViewProjAndFog (dirtyFlags, ref world, ref view, ref projection, fogEnabled, fogStart, fogEnd, worldViewProjParam, fogVectorParam);
 
 			// Recompute the diffuse/emissive/alpha material color parameters?
 			if ((dirtyFlags & EffectDirtyFlags.MaterialColor) != 0) {
@@ -569,9 +561,9 @@ namespace Microsoft.Xna.Framework.Graphics
 				dirtyFlags &= ~EffectDirtyFlags.MaterialColor;
 			}
 
-			if (TextureEnabled) {
-				_texture.Apply();
-				textureParam.SetValue(_texture);
+			if (TextureEnabled && Texture != null) {
+				Texture.Apply();
+				textureParam.SetValue(Texture);
 				//System.Console.WriteLine("Texture set");
 			}
 //
@@ -590,7 +582,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 
 
-
+			base.OnApply();
 		}
 
 

@@ -15,12 +15,10 @@ namespace Microsoft.Xna.Framework.Graphics
 		
 		public void Apply ()
 		{
-
+			_technique._effect.OnApply();
+			
 			// Tell the GL Context to use the program
 			GL.UseProgram (shaderProgram);
-
-			_technique._effect.OnApply();
-
 		}
 
         public EffectPass(EffectTechnique technique)
@@ -112,7 +110,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			if (infoLogLen > 0)
 				infoLog = GL.GetProgramInfoLog (obj);
 
-			Console.WriteLine ("{0} {1}", whichObj, infoLog);
+			Console.WriteLine ("[{0}] Info: [{1}]", whichObj, infoLog);
 
 		}		
     }

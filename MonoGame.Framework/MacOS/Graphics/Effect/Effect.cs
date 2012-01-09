@@ -118,7 +118,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 				GL.GetShader (fragment_handle, ShaderParameter.CompileStatus, out compiled);
 				if (compiled == (int)All.False) {
-					Console.Write ("Fragment Compilation Failed!");
+					throw new Exception("Fragment Compilation Failed!");
 				}
 			}
 
@@ -126,7 +126,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				GL.CompileShader (vertex_handle);
 				GL.GetShader (vertex_handle, ShaderParameter.CompileStatus, out compiled);
 				if (compiled == (int)All.False) {
-					Console.Write ("Vertex Compilation Failed!");
+					throw new Exception("Vertex Compilation Failed!");
 				}
 			}
 
@@ -219,7 +219,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 				GL.GetShader (fragment_handle, ShaderParameter.CompileStatus, out compiled);
 				if (compiled == (int)All.False) {
-					Console.Write ("Fragment Compilation Failed!");
+					throw new Exception("Fragment Compilation Failed!");;
 				}
 			}
 
@@ -227,7 +227,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				GL.CompileShader (vertex_handle);
 				GL.GetShader (vertex_handle, ShaderParameter.CompileStatus, out compiled);
 				if (compiled == (int)All.False) {
-					Console.Write ("Vertex Compilation Failed!");
+					throw new Exception("Vertex Compilation Failed!");
 				}
 			}
 			 
@@ -294,6 +294,12 @@ namespace Microsoft.Xna.Framework.Graphics
 			// Compile the shader
 			GL.CompileShader (shader);
 			
+			int compiled;
+			GL.GetShader (shader, ShaderParameter.CompileStatus, out compiled);
+			if (compiled == (int)All.False) {
+				throw new Exception("Vertex Compilation Failed!");
+			}
+			
 			vertexShaders.Add(shader);
 
 			return shader;
@@ -307,6 +313,12 @@ namespace Microsoft.Xna.Framework.Graphics
 			GL.ShaderSource (shader, source);
 			// Compile the shader
 			GL.CompileShader (shader);
+			
+			int compiled;
+			GL.GetShader (shader, ShaderParameter.CompileStatus, out compiled);
+			if (compiled == (int)All.False) {
+				throw new Exception("Fragment Compilation Failed!");
+			}
 			
 			fragmentShaders.Add(shader);
 
@@ -358,7 +370,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			GL.GetProgram (obj, ProgramParameter.ActiveUniforms, out actUnis);
 
-			Console.WriteLine ("{0} {1}", whichObj, actUnis);
+			Console.WriteLine ("[{0}] Active Uniforms: [{1}]", whichObj, actUnis);
 
 			int size;
 			ActiveUniformType type;

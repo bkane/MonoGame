@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -26,7 +26,7 @@ namespace Microsoft.Xna.Framework.Graphics
 		int numOfElements;
 		Effect _parentEffect;
 
-		internal int UserInedx {
+		internal int UserIndex {
 			get { return userIndex; }	
 		}
 
@@ -130,7 +130,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			this.paramClass = paramClass;
 			this.rowCount = rowCount;
 			this.colCount = colCount;
-			this._cachedValue = _cachedValue;
+			this._cachedValue = cachedValue;
 
 		}
 
@@ -289,6 +289,7 @@ namespace Microsoft.Xna.Framework.Graphics
 		public void SetValue (Matrix value)
 		{ 
 			GL.UseProgram (_parentEffect.CurrentTechnique.Passes [0].shaderProgram);
+			
 			MonoMac.OpenGL.Matrix4 mat4 = new MonoMac.OpenGL.Matrix4 (value.M11,
 										value.M12,
 										value.M13,
@@ -305,10 +306,11 @@ namespace Microsoft.Xna.Framework.Graphics
 										value.M42,
 										value.M43,
 										value.M44);
+			
 			_cachedValue = mat4;
 			float[] matArray = Matrix.ToFloatArray(value);
 			GL.UniformMatrix4 (internalIndex, matArray.Length, true, matArray);
-			//GL.UseProgram (0);
+			GL.UseProgram (0);
 		}
 
 		public void SetValue (Matrix[] value)
