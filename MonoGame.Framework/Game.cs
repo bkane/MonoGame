@@ -490,14 +490,14 @@ namespace Microsoft.Xna.Framework
         //       Components.ComponentAdded.
         private void InitializeExistingComponents()
         {
-            for (int i = Components.Count - 1; i >= 0; --i)
+            for (int i = 0; i < Components.Count; i++)
                 Components[i].Initialize();
         }
 
         private void CategorizeComponents()
         {
             DecategorizeComponents();
-            for (int i = Components.Count - 1; i >= 0; --i)
+            for (int i = 0; i < Components.Count; i++)
                 CategorizeComponent(Components[i]);
         }
 
