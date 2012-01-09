@@ -76,7 +76,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 				string code =
 					CommonPSInputHeader
-				+ "vec4 color = texture2D(Texture,TexCoord) * Diffuse;\n"
+				+ "vec4 color = texture2D(Texture,TexCoord) * gl_Color;\n"
 				// We need to add fog here
 				+ "gl_FragColor = color;\n"
 				+ "\n}";
@@ -92,7 +92,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 				string code =
 					CommonPSInputHeader
-				+ "gl_FragColor = texture2D(Texture,TexCoord);\n"
+				+ "gl_FragColor = texture2D(Texture,TexCoord) * gl_Color;\n"
 				+ "\n}";
 
 
