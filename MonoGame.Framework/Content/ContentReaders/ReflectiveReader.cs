@@ -108,13 +108,13 @@ namespace Microsoft.Xna.Framework.Content
             PropertyInfo property = member as PropertyInfo;
             FieldInfo field = member as FieldInfo;
             if (property != null && property.CanWrite == false) return;
-            Attribute attr = Attribute.GetCustomAttribute(member, typeof(ContentSerializerIgnoreAttribute));
-            if (attr != null) return;
-            Attribute attr2 = Attribute.GetCustomAttribute(member, typeof(ContentSerializerAttribute));
+            Attribute contentSerializerIgnore = Attribute.GetCustomAttribute(member, typeof(ContentSerializerIgnoreAttribute));
+            if (contentSerializerIgnore != null) return;
+            Attribute contentSerializerAttr = Attribute.GetCustomAttribute(member, typeof(ContentSerializerAttribute));
             bool isSharedResource = false;
-            if (attr2 != null)
+            if (contentSerializerAttr != null)
             {
-                var cs = attr2 as ContentSerializerAttribute;
+                var cs = contentSerializerAttr as ContentSerializerAttribute;
                 isSharedResource = cs.SharedResource;
             }
             else
@@ -153,8 +153,10 @@ namespace Microsoft.Xna.Framework.Content
                 }
                 else
                 {
-                    //if (field.IsPrivate == false) 
-					field.SetValue(parent, obj2);
+                    if (!field.IsPrivate || (contentSerializerAttr != null))
+					{
+						field.SetValue(parent, obj2);
+					}
                 }
             }
             else
