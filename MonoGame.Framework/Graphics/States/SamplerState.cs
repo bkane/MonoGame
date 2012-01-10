@@ -135,6 +135,8 @@ namespace Microsoft.Xna.Framework.Graphics
 				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)(useMipmaps ? TextureMinFilter.LinearMipmapLinear : TextureMinFilter.Linear));
 				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
 				break;
+			default:
+				throw new NotImplementedException();
 			}
 
 			// Set up texture addressing.
