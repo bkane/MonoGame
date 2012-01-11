@@ -42,10 +42,19 @@ namespace Microsoft.Xna.Framework.Audio
 			if (complexSound) {
 				soundClips = new XactClip[numClips];
 				for (int i=0; i<numClips; i++) {
+					
 					soundReader.ReadByte (); //unkn
 					uint clipOffset = soundReader.ReadUInt32 ();
 					soundReader.ReadUInt32 (); //unkn
 					
+					//HACK!!! Sounds with RPCs attached clearly don't store their clipOffset here,
+					//so we can't use them at the moment. Skip this clip if the offset is bogus
+					if (clipOffset > 10000000)
+					{
+						Console.WriteLine("Error read XactClip - clipOffset is bogus. Sound has RPC attached? (" + clipOffset + ")");
+						continue;
+					}
+
 					soundClips[i] = new XactClip(soundBank, soundReader, clipOffset);
 				}
 			}
@@ -61,7 +70,10 @@ namespace Microsoft.Xna.Framework.Audio
 		public void Play() {
 			if (complexSound) {
 				foreach (XactClip clip in soundClips) {
-					clip.Play();
+					if (clip != null)
+					{
+						clip.Play();
+					}
 				}
 			} else {
 				if (wave.Playing) wave.Stop ();
@@ -72,7 +84,10 @@ namespace Microsoft.Xna.Framework.Audio
 		public void Stop() {
 			if (complexSound) {
 				foreach (XactClip clip in soundClips) {
-					clip.Stop();
+					if (clip != null)
+					{
+						clip.Stop();
+					}
 				}
 			} else {
 				wave.Stop ();
@@ -82,7 +97,10 @@ namespace Microsoft.Xna.Framework.Audio
 		public void Pause() {
 			if (complexSound) {
 				foreach (XactClip clip in soundClips) {
-					clip.Pause();
+					if (clip != null)
+					{
+						clip.Pause();
+					}
 				}
 			} else {
 				wave.Pause ();
@@ -92,7 +110,14 @@ namespace Microsoft.Xna.Framework.Audio
 		public float Volume {
 			get {
 				if (complexSound) {
-					return soundClips[0].Volume;
+					if (soundClips[0] != null)
+					{
+						return soundClips[0].Volume;
+					}
+					else
+					{
+						return 0;
+					}
 				} else {
 					return wave.Volume;
 				}
@@ -100,7 +125,10 @@ namespace Microsoft.Xna.Framework.Audio
 			set {
 				if (complexSound) {
 					foreach (XactClip clip in soundClips) {
-						clip.Volume = value;
+						if (clip != null)
+						{
+							clip.Volume = value;
+						}
 					}
 				} else {
 					wave.Volume = value;
@@ -112,7 +140,10 @@ namespace Microsoft.Xna.Framework.Audio
 			get {
 				if (complexSound) {
 					foreach (XactClip clip in soundClips) {
-						if (clip.Playing) return true;
+						if (clip != null)
+						{
+							if (clip.Playing) return true;
+						}	
 					}
 					return false;
 				} else {

@@ -78,7 +78,12 @@ namespace Microsoft.Xna.Framework.Audio
 					events[i] = evnt;
 					break;
 				default:
-					throw new NotImplementedException();
+					//throw new NotImplementedException();
+					//HACK
+					//Silently continue if we can't read the Play event. This happens if a sound has Vol. Var.
+					//or Pitch Var. (probably among other things)
+					Console.WriteLine("Unable to read XactClip event. Events like Vol Var. and Pitch Var. are unsupported.");
+					continue;
 				}
 				
 				events[i].clip = this;
@@ -90,20 +95,36 @@ namespace Microsoft.Xna.Framework.Audio
 		
 		public void Play() {
 			//TODO: run events
-			events[0].Play ();
+			if (events[0] != null)
+			{
+				events[0].Play ();
+			}
 		}
 		
 		public void Stop() {
-			events[0].Stop ();
+			if (events[0] != null)
+			{
+				events[0].Stop ();
+			}
 		}
 		
 		public void Pause() {
-			events[0].Pause();
+			if (events[0] != null)
+			{
+				events[0].Pause();
+			}
 		}
 		
 		public bool Playing {
 			get {
-				return events[0].Playing;
+				if (events[0] != null)
+				{
+					return events[0].Playing;
+				}
+				else
+				{
+					return false;
+				}
 			}
 		}
 		
@@ -113,7 +134,11 @@ namespace Microsoft.Xna.Framework.Audio
 			}
 			set {
 				volume = value;
-				events[0].Volume = value;
+				
+				if (events[0] != null)
+				{
+					events[0].Volume = value;
+				}
 			}
 		}
 		

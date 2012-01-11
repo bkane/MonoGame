@@ -96,6 +96,10 @@ namespace Microsoft.Xna.Framework.Audio
 			variationRand = new Random();
 		}
 		
+		public void Apply3D(AudioListener listener, AudioEmitter emitter)
+		{
+		}
+		
 		internal Cue(string cuename, XactSound[] _sounds, float[] _probs)
 		{
 			name = cuename;
