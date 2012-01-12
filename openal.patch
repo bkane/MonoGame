@@ -1,0 +1,4447 @@
+From 889e1682cbd2fe898578d8d2d2e6d4f53bead0ec Mon Sep 17 00:00:00 2001
+From: Kenneth Pouncey <kjpou@pt.lu>
+Date: Tue, 3 Jan 2012 11:14:24 +0100
+Subject: [PATCH 1/9] Adde the OpenAL support to the Mac OSX side
+
+---
+ MonoGame.Framework/Audio/SoundBank.cs              |    2 +-
+ MonoGame.Framework/Audio/WaveBank.cs               |    8 +-
+ MonoGame.Framework/Audio/XactClip.cs               |    6 +-
+ MonoGame.Framework/Audio/XactSound.cs              |   15 +-
+ MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs   |  105 ++++++++
+ .../MacOS/Audio/OpenALSoundController.cs           |  201 ++++++++++++++++
+ MonoGame.Framework/MacOS/Audio/OpenALSupport.cs    |  197 ++++++++++++++++
+ MonoGame.Framework/MacOS/Audio/Sound.cs            |  196 ---------------
+ MonoGame.Framework/MacOS/Audio/SoundEffect.cs      |  249 ++++++++++++++++++++
+ .../MacOS/Audio/SoundEffectInstance.cs             |  241 +++++++++++++++++++
+ MonoGame.Framework/MacOS/MacGamePlatform.cs        |    6 +
+ MonoGame.Framework/Media/Song.cs                   |   17 +-
+ MonoGame.Framework/MonoGame.Framework.MacOS.csproj |    8 +-
+ 13 files changed, 1031 insertions(+), 220 deletions(-)
+ mode change 100644 => 100755 MonoGame.Framework/Audio/SoundBank.cs
+ mode change 100644 => 100755 MonoGame.Framework/Audio/WaveBank.cs
+ mode change 100644 => 100755 MonoGame.Framework/Audio/XactClip.cs
+ mode change 100644 => 100755 MonoGame.Framework/Audio/XactSound.cs
+ create mode 100755 MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs
+ create mode 100755 MonoGame.Framework/MacOS/Audio/OpenALSoundController.cs
+ create mode 100755 MonoGame.Framework/MacOS/Audio/OpenALSupport.cs
+ delete mode 100644 MonoGame.Framework/MacOS/Audio/Sound.cs
+ create mode 100755 MonoGame.Framework/MacOS/Audio/SoundEffect.cs
+ create mode 100755 MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
+ mode change 100644 => 100755 MonoGame.Framework/Media/Song.cs
+
+diff --git a/MonoGame.Framework/Audio/SoundBank.cs b/MonoGame.Framework/Audio/SoundBank.cs
+old mode 100644
+new mode 100755
+index 51a9a1c..b2f9695
+--- a/MonoGame.Framework/Audio/SoundBank.cs
++++ b/MonoGame.Framework/Audio/SoundBank.cs
+@@ -199,7 +199,7 @@ public SoundBank(AudioEngine audioEngine, string fileName)
+ 			loaded = true;
+         }
+ 		
+-		internal Sound GetWave(byte waveBankIndex, uint trackIndex) {
++		internal SoundEffectInstance GetWave(byte waveBankIndex, uint trackIndex) {
+ 			return waveBanks[waveBankIndex].sounds[trackIndex];
+ 		}
+ 		
+diff --git a/MonoGame.Framework/Audio/WaveBank.cs b/MonoGame.Framework/Audio/WaveBank.cs
+old mode 100644
+new mode 100755
+index 2993c1f..f350b72
+--- a/MonoGame.Framework/Audio/WaveBank.cs
++++ b/MonoGame.Framework/Audio/WaveBank.cs
+@@ -31,7 +31,7 @@ namespace Microsoft.Xna.Framework.Audio
+ {
+     public class WaveBank : IDisposable
+     {
+-        internal Sound[] sounds;
++        internal SoundEffectInstance[] sounds;
+         internal string BankName;
+ 
+         struct Segment
+@@ -176,7 +176,7 @@ public WaveBank(AudioEngine audioEngine, string nonStreamingWaveBankFilename)
+                 entry_name[wavebankdata.EntryNameElementSize] = 0;
+             }
+ 
+-            sounds = new Sound[wavebankdata.EntryCount];
++            sounds = new SoundEffectInstance[wavebankdata.EntryCount];
+ 
+             for (int current_entry = 0; current_entry < wavebankdata.EntryCount; current_entry++)
+             {
+@@ -346,7 +346,7 @@ public WaveBank(AudioEngine audioEngine, string nonStreamingWaveBankFilename)
+                     writer.Close();
+                     mStream.Close();
+ 					
+-                    sounds[current_entry] = new Sound(mStream.ToArray(), 1.0f, false);
++                    sounds[current_entry] = new SoundEffect(mStream.ToArray(), rate, AudioChannels.Mono).CreateInstance();
+ 					
+                 } else if (codec == MiniForamtTag_WMA) { //WMA or xWMA (or XMA2)
+                     byte[] wmaSig = {0x30, 0x26, 0xb2, 0x75, 0x8e, 0x66, 0xcf, 0x11, 0xa6, 0xd9, 0x0, 0xaa, 0x0, 0x62, 0xce, 0x6c};
+@@ -395,7 +395,7 @@ public WaveBank(AudioEngine audioEngine, string nonStreamingWaveBankFilename)
+                         audioFile.Write(audiodata, 0, audiodata.Length);
+                         audioFile.Close();
+                         
+-                        sounds[current_entry] = new Sound(filename, 1.0f, false);
++                        sounds[current_entry] = new SoundEffect(filename).CreateInstance();
+                     } else {
+                         //An xWMA or XMA2 file. Can't be played atm :(
+                         throw new NotImplementedException();
+diff --git a/MonoGame.Framework/Audio/XactClip.cs b/MonoGame.Framework/Audio/XactClip.cs
+old mode 100644
+new mode 100755
+index 19fa624..b75dc6c
+--- a/MonoGame.Framework/Audio/XactClip.cs
++++ b/MonoGame.Framework/Audio/XactClip.cs
+@@ -18,10 +18,10 @@ abstract class ClipEvent {
+ 		}
+ 		
+ 		class EventPlayWave : ClipEvent {
+-			public Sound wave;
++			public SoundEffectInstance wave;
+ 			public override void Play() {
+ 				wave.Volume = clip.Volume;
+-				if (wave.Playing) wave.Stop ();
++				if (wave.State == SoundState.Playing) wave.Stop ();
+ 				wave.Play ();
+ 			}
+ 			public override void Stop() {
+@@ -32,7 +32,7 @@ class EventPlayWave : ClipEvent {
+ 			}
+ 			public override bool Playing {
+ 				get {
+-					return wave.Playing;
++					return wave.State == SoundState.Playing;
+ 				}
+ 			}
+ 			public override float Volume {
+diff --git a/MonoGame.Framework/Audio/XactSound.cs b/MonoGame.Framework/Audio/XactSound.cs
+old mode 100644
+new mode 100755
+index 8e65792..b0e6bf1
+--- a/MonoGame.Framework/Audio/XactSound.cs
++++ b/MonoGame.Framework/Audio/XactSound.cs
+@@ -7,7 +7,7 @@ internal class XactSound
+ 	{
+ 		bool complexSound;
+ 		XactClip[] soundClips;
+-		Sound wave;
++		SoundEffectInstance wave;
+ 		
+ 		public XactSound (SoundBank soundBank, BinaryReader soundReader, uint soundOffset)
+ 		{
+@@ -53,18 +53,21 @@ public XactSound (SoundBank soundBank, BinaryReader soundReader, uint soundOffse
+ 			soundReader.BaseStream.Seek (oldPosition, SeekOrigin.Begin);
+ 		}
+ 		
+-		public XactSound (Sound sound) {
++//		public XactSound (Sound sound) {
++//			complexSound = false;
++//			wave = sound;
++//		}
++		public XactSound (SoundEffectInstance sound) {
+ 			complexSound = false;
+ 			wave = sound;
+-		}
+-		
++		}		
+ 		public void Play() {
+ 			if (complexSound) {
+ 				foreach (XactClip clip in soundClips) {
+ 					clip.Play();
+ 				}
+ 			} else {
+-				if (wave.Playing) wave.Stop ();
++				if (wave.State == SoundState.Playing) wave.Stop ();
+ 				wave.Play ();
+ 			}
+ 		}
+@@ -116,7 +119,7 @@ public XactSound (SoundBank soundBank, BinaryReader soundReader, uint soundOffse
+ 					}
+ 					return false;
+ 				} else {
+-					return wave.Playing;
++					return wave.State == SoundState.Playing;
+ 				}
+ 			}
+ 		}
+diff --git a/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs b/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs
+new file mode 100755
+index 0000000..940723a
+--- /dev/null
++++ b/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs
+@@ -0,0 +1,105 @@
++using System;
++
++using MonoMac.OpenAL;
++
++namespace Microsoft.Xna.Framework.Audio
++{
++	internal class OALSoundBuffer : IDisposable
++	{
++		int openALDataBuffer;
++		internal byte[] pcmDataBuffer;
++		ALFormat openALFormat;
++		int dataSize;
++		int sampleRate;
++		private int _sourceId;
++
++		public OALSoundBuffer ()
++		{
++			ALError alError;
++			
++			alError = AL.GetError ();
++			AL.GenBuffers (1, out openALDataBuffer);
++			alError = AL.GetError ();
++			if (alError != ALError.NoError) {
++				Console.WriteLine ("Failed to generate OpenAL data buffer: ", AL.GetErrorString (alError));
++			}
++		}
++
++		public int OpenALDataBuffer {
++			get {
++				return openALDataBuffer;
++			}
++		}
++
++		public double Duration {
++			get;
++			set;
++		}
++
++		public void BindDataBuffer (byte[] dataBuffer, ALFormat format, int size, int sampleRate)
++		{
++			pcmDataBuffer = dataBuffer;
++			openALFormat = format;
++			dataSize = size;
++			this.sampleRate = sampleRate;
++			AL.BufferData (openALDataBuffer, openALFormat, pcmDataBuffer, dataSize, this.sampleRate);
++
++			int bits, channels;
++
++			AL.GetBuffer (openALDataBuffer, ALGetBufferi.Bits, out bits);
++			AL.GetBuffer (openALDataBuffer, ALGetBufferi.Channels, out channels);
++
++			ALError alError = AL.GetError ();
++			if (alError != ALError.NoError) {
++				Console.WriteLine ("Failed to get buffer attributes: ", AL.GetErrorString (alError));
++				Duration = -1;
++			} else {
++				Duration = (float)(size / ((bits / 8) * channels)) / (float)sampleRate;
++			}
++
++			//Console.WriteLine("Duration: " + Duration + " / size: " + size + " bits: " + bits + " channels: " + channels + " rate: " + sampleRate);
++
++		}
++
++		public void Dispose ()
++		{
++			CleanUpBuffer ();
++		}
++
++		public void CleanUpBuffer ()
++		{
++			if (AL.IsBuffer (openALDataBuffer)) {
++				AL.DeleteBuffers (1, ref openALDataBuffer);
++			}
++
++			pcmDataBuffer = null;
++
++		}
++
++		public int SourceId
++		{
++			get {
++				return _sourceId;
++			}
++
++			set {
++				_sourceId = value;
++				if (Reserved != null)
++					Reserved(this, new EventArgs());
++
++			}
++		}
++
++		public void RecycleSoundBuffer()
++		{
++			if (Recycled != null)
++				Recycled(this, new EventArgs());
++		}
++
++		#region Events
++		public event EventHandler<EventArgs> Reserved;
++		public event EventHandler<EventArgs> Recycled;
++		#endregion
++	}
++}
++
+diff --git a/MonoGame.Framework/MacOS/Audio/OpenALSoundController.cs b/MonoGame.Framework/MacOS/Audio/OpenALSoundController.cs
+new file mode 100755
+index 0000000..29b0bdd
+--- /dev/null
++++ b/MonoGame.Framework/MacOS/Audio/OpenALSoundController.cs
+@@ -0,0 +1,201 @@
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.IO;
++using System.Runtime.InteropServices;
++
++//using MonoMac.AudioToolbox;
++//using MonoMac.AudioUnit;
++using MonoMac.OpenAL;
++
++namespace Microsoft.Xna.Framework.Audio
++{
++	internal sealed class OpenALSoundController : IDisposable
++	{
++		static OpenALSoundController _instance = null;
++		IntPtr _device;
++		ContextHandle _context;
++		//int outputSource;
++		//int[] buffers;
++		AlcError _lastOpenALError;
++		int[] allSourcesArray;
++		const int MAX_NUMBER_OF_SOURCES = 32;
++		const double PREFERRED_MIX_RATE = 44100;
++		HashSet<int> availableSourcesCollection;
++		HashSet<OALSoundBuffer> inUseSourcesCollection;
++		HashSet<OALSoundBuffer> playingSourcesCollection;
++
++		private OpenALSoundController ()
++		{
++			alcMacOSXMixerOutputRate(PREFERRED_MIX_RATE);
++			_device = Alc.OpenDevice (string.Empty);
++			CheckALError ("Could not open AL device");
++			if (_device != IntPtr.Zero) {
++				int[] attribute = new int[0];
++				_context = Alc.CreateContext (_device, attribute);
++				CheckALError ("Could not open AL context");
++
++				if (_context != ContextHandle.Zero) {
++					Alc.MakeContextCurrent (_context);
++					CheckALError ("Could not make AL context current");
++				}
++			} else {
++				return;
++			}
++
++			allSourcesArray = new int[MAX_NUMBER_OF_SOURCES];
++			AL.GenSources (allSourcesArray);
++
++			availableSourcesCollection = new HashSet<int> ();
++			inUseSourcesCollection = new HashSet<OALSoundBuffer> ();
++			playingSourcesCollection = new HashSet<OALSoundBuffer> ();
++
++
++			for (int x=0; x < MAX_NUMBER_OF_SOURCES; x++) {
++				availableSourcesCollection.Add (allSourcesArray [x]);
++			}
++		}
++
++		public static OpenALSoundController GetInstance {
++			get {
++				if (_instance == null)
++					_instance = new OpenALSoundController ();
++				return _instance;
++			}
++
++		}
++
++		public void CheckALError (string operation)
++		{
++			_lastOpenALError = Alc.GetError (_device);
++
++			if (_lastOpenALError == AlcError.NoError) {
++				return;
++			}
++
++			string errorFmt = "OpenAL Error: {0}";
++			Console.WriteLine (String.Format ("{0} - {1}",
++							operation,
++							//string.Format (errorFmt, Alc.GetString (_device, _lastOpenALError))));
++							string.Format (errorFmt, _lastOpenALError)));
++		}
++
++		private void CleanUpOpenAL ()
++		{
++			Alc.MakeContextCurrent (ContextHandle.Zero);
++			if (_context != ContextHandle.Zero) {
++				Alc.DestroyContext (_context);
++				_context = ContextHandle.Zero;
++			}
++			if (_device != IntPtr.Zero) {
++				Alc.CloseDevice (_device);
++				_device = IntPtr.Zero;
++			}
++		}
++
++		public void Dispose ()
++		{
++			CleanUpOpenAL ();
++		}
++
++		public bool ReserveSource (OALSoundBuffer soundBuffer)
++		{
++			int sourceNumber;
++			if (availableSourcesCollection.Count == 0) {
++
++				soundBuffer.SourceId = 0;
++				return false;
++			}
++			
++
++			sourceNumber = availableSourcesCollection.First ();
++			soundBuffer.SourceId = sourceNumber;
++			inUseSourcesCollection.Add (soundBuffer);
++
++			availableSourcesCollection.Remove (sourceNumber);
++
++			//sourceId = sourceNumber;
++			return true;
++		}
++
++		public void RecycleSource (OALSoundBuffer soundBuffer)
++		{
++			inUseSourcesCollection.Remove (soundBuffer);
++			availableSourcesCollection.Add (soundBuffer.SourceId);
++			soundBuffer.RecycleSoundBuffer();
++		}
++
++		public void PlaySound (OALSoundBuffer soundBuffer)
++		{
++			playingSourcesCollection.Add (soundBuffer);
++			AL.SourcePlay (soundBuffer.SourceId);
++		}
++
++		public void StopSound (OALSoundBuffer soundBuffer)
++		{
++			AL.SourceStop (soundBuffer.SourceId);
++
++			AL.Source (soundBuffer.SourceId,ALSourcei.Buffer, 0);
++			playingSourcesCollection.Remove (soundBuffer);
++			RecycleSource (soundBuffer);
++		}
++
++		public void PauseSound (OALSoundBuffer soundBuffer)
++		{
++			AL.SourcePause (soundBuffer.SourceId);
++		}
++
++		public bool IsState (OALSoundBuffer soundBuffer, int state)
++		{
++			int sourceState;
++
++			AL.GetSource (soundBuffer.SourceId, ALGetSourcei.SourceState, out sourceState);
++
++			if (state == sourceState) {
++				return true;
++			}
++
++			return false;
++		}
++
++		public double SourceCurrentPosition (int sourceId)
++		{
++			int pos;
++			AL.GetSource (sourceId, ALGetSourcei.SampleOffset, out pos);
++			return pos;
++		}
++
++		public void Update ()
++		{
++			HashSet<OALSoundBuffer> purgeMe = new HashSet<OALSoundBuffer> ();
++
++			ALSourceState state;
++			foreach (var soundBuffer in playingSourcesCollection) {
++
++				state = AL.GetSourceState (soundBuffer.SourceId);
++
++				if (state == ALSourceState.Stopped) {
++
++					AL.Source (soundBuffer.SourceId, ALSourcei.Buffer, 0);
++					purgeMe.Add (soundBuffer);
++					//Console.WriteLine ("to be recycled: " + soundBuffer.SourceId);
++				}
++
++			}
++
++			foreach (var soundBuffer in purgeMe) {
++
++				playingSourcesCollection.Remove (soundBuffer);
++				RecycleSource (soundBuffer);
++			}
++		}
++
++		public const string OpenALLibrary = "/System/Library/Frameworks/OpenAL.framework/OpenAL";
++
++		[DllImport(OpenALLibrary, EntryPoint = "alcMacOSXMixerOutputRate")]
++		static extern void alcMacOSXMixerOutputRate (double rate); // caution
++
++
++	}
++}
++
+diff --git a/MonoGame.Framework/MacOS/Audio/OpenALSupport.cs b/MonoGame.Framework/MacOS/Audio/OpenALSupport.cs
+new file mode 100755
+index 0000000..1c5bdde
+--- /dev/null
++++ b/MonoGame.Framework/MacOS/Audio/OpenALSupport.cs
+@@ -0,0 +1,197 @@
++using System;
++using System.Runtime.InteropServices;
++
++using MonoMac.AppKit;
++using MonoMac.Foundation;
++using MonoMac.CoreFoundation;
++using MonoMac.AudioToolbox;
++using MonoMac.AudioUnit;
++//using MonoTouch.UIKit;
++//using MonoTouch.Foundation;
++//using MonoTouch.CoreFoundation;
++//using MonoTouch.AudioToolbox;
++//using MonoTouch.AudioUnit;
++
++using MonoMac.OpenAL;
++
++namespace Microsoft.Xna.Framework.Audio
++{
++	internal static class OpenALSupport
++	{
++		public static ExtAudioFile GetExtAudioFile (NSUrl url, out AudioStreamBasicDescription audioDescription)
++		{
++			// Notice the following line that we can not pass a NSUrl to a CFUrl
++			//ExtAudioFile ext = ExtAudioFile.OpenUrl(url);
++
++			// Basic Descriptions
++			AudioStreamBasicDescription fileFormat;
++			AudioStreamBasicDescription outputFormat;
++
++			// So now we create a CFUrl
++			CFUrl curl = CFUrl.FromFile (url.Path);
++
++			// Open the file
++			ExtAudioFile ext = ExtAudioFile.OpenUrl (curl);
++
++			// Get the audio format
++			fileFormat = ext.FileDataFormat;
++
++			// Don't know how to handle sounds with more than 2 channels (i.e. stereo)
++			// Remember that OpenAL sound effects must be mono to be spatialized anyway.
++			if (fileFormat.ChannelsPerFrame > 2) {
++				Console.WriteLine ("Unsupported Format: Channel count [0] is greater than stereo.", fileFormat.ChannelsPerFrame);
++				return null;
++			}
++
++			// The output format must be linear PCM because that's the only type OpenAL knows how to deal with.
++			// Set the client format to 16 bit signed integer (native-endian) data because that is the most
++			// optimal format on iPhone/iPod Touch hardware.
++			// Maintain the channel count and sample rate of the original source format.
++			outputFormat = new AudioStreamBasicDescription ();	// Create our output format description to be converted to
++			outputFormat.SampleRate = fileFormat.SampleRate;	// Preserve the original sample rate
++			outputFormat.ChannelsPerFrame = fileFormat.ChannelsPerFrame;	// Preserve the orignal number of channels
++			outputFormat.Format = AudioFormatType.LinearPCM;	// We want Linear PCM
++
++			// IsBigEndian is causing some problems with distorted sounds on MacOSX
++//			outputFormat.FormatFlags = AudioFormatFlags.IsBigEndian
++//							| AudioFormatFlags.IsPacked
++//							| AudioFormatFlags.IsSignedInteger;
++			
++			outputFormat.FormatFlags = AudioFormatFlags.IsPacked
++							| AudioFormatFlags.IsSignedInteger;
++			outputFormat.FramesPerPacket = 1;	// We know for linear PCM, the definition is 1 frame per packet
++			outputFormat.BitsPerChannel = 16;	// We know we want 16-bit
++			outputFormat.BytesPerPacket = 2 * outputFormat.ChannelsPerFrame;	// We know we are using 16-bit, so 2-bytes per channel per frame
++			outputFormat.BytesPerFrame = 2 * outputFormat.ChannelsPerFrame;		// For PCM, since 1 frame is 1 packet, it is the same as mBytesPerPacket
++
++			// Set the desired client (output) data format
++			ext.ClientDataFormat = outputFormat;
++
++			// Copy the output format to the audio description that was passed in so the
++			// info will be returned to the user.
++			audioDescription = outputFormat;
++
++			return ext;
++		}
++
++		public static bool GetDataFromExtAudioFile (ExtAudioFile ext, AudioStreamBasicDescription outputFormat, int maxBufferSize,
++		                                       byte[] dataBuffer, out int dataBufferSize, out ALFormat format, out double sampleRate)
++		{
++			int errorStatus = 0;
++			int bufferSizeInFrames = 0;
++			dataBufferSize = 0;
++			format = ALFormat.Mono16;
++			sampleRate = 0;
++			/* Compute how many frames will fit into our max buffer size */
++			bufferSizeInFrames = maxBufferSize / outputFormat.BytesPerFrame;
++
++			if (dataBuffer != null) {
++				MutableAudioBufferList audioBufferList = new MutableAudioBufferList (1, maxBufferSize);
++
++				audioBufferList.Buffers [0].DataByteSize = maxBufferSize;
++				audioBufferList.Buffers [0].NumberChannels = outputFormat.ChannelsPerFrame;
++
++				GCHandle meBePinned = GCHandle.Alloc (dataBuffer, GCHandleType.Pinned);
++				IntPtr meBePointer = meBePinned.AddrOfPinnedObject ();
++
++				audioBufferList.Buffers [0].Data = meBePointer;
++
++
++				try {
++					// Read the data into an AudioBufferList
++					// errorStatus here returns back the amount of information read
++					errorStatus = ext.Read (bufferSizeInFrames, audioBufferList);
++					if (errorStatus >= 0) {
++						/* Success */
++						/* Note: 0 == bufferSizeInFrames is a legitimate value meaning we are EOF. */
++
++						/* ExtAudioFile.Read returns the number of frames actually read.
++						 * Need to convert back to bytes.
++						 */
++						dataBufferSize = bufferSizeInFrames * outputFormat.BytesPerFrame;
++
++						// Now we set our format
++						format = outputFormat.ChannelsPerFrame > 1 ? ALFormat.Stereo16 : ALFormat.Mono16;
++
++						sampleRate = outputFormat.SampleRate;
++					} else {
++						Console.WriteLine ("ExtAudioFile.Read failed, Error = " + errorStatus);
++						return false;
++					}
++				} catch (Exception exc) {
++					Console.WriteLine ("ExtAudioFile.Read failed: " + exc.Message);
++					return false;
++				} finally {
++					// Don't forget to free our dataBuffer memory pointer that was pinned above
++					meBePinned.Free ();
++				}
++			}
++			return true;
++		}
++
++		/**
++		 * Returns a byte buffer containing all the pcm data.
++		 */
++		public static byte[] GetOpenALAudioDataAll (NSUrl file_url, out int dataBufferSize, out ALFormat alFormat, out double sampleRate, out double duration)
++		{
++
++			long fileLengthInFrames = 0;
++			AudioStreamBasicDescription outputFormat;
++			int maxBufferSize;
++			byte[] pcmData;
++			dataBufferSize = 0;
++			alFormat = 0;
++			sampleRate = 0;
++			duration = 0;
++
++			ExtAudioFile extFile;
++
++			try {
++				extFile = GetExtAudioFile (file_url, out outputFormat);
++			} catch (Exception extExc) {
++				Console.WriteLine ("ExtAudioFile.OpenUrl failed, Error : " + extExc.Message);
++				return null;
++			}
++
++			/* Get the total frame count */
++			try {
++				fileLengthInFrames = extFile.FileLengthFrames;
++			} catch (Exception exc) {
++				Console.WriteLine ("ExtAudioFile.FileLengthFranes failed, Error : " + exc.Message);
++				return null;
++			}
++
++			/* Compute the number of bytes needed to hold all the data in the file. */
++			maxBufferSize = (int)(fileLengthInFrames * outputFormat.BytesPerFrame);
++			/* Allocate memory to hold all the decoded PCM data. */
++			pcmData = new byte[maxBufferSize];
++
++			bool gotData = GetDataFromExtAudioFile (extFile, outputFormat, maxBufferSize, pcmData,
++			                        out dataBufferSize, out alFormat, out sampleRate);
++
++			if (!gotData) {
++				pcmData = null;
++			}
++
++			duration = (dataBufferSize / ((outputFormat.BitsPerChannel / 8) * outputFormat.ChannelsPerFrame)) / outputFormat.SampleRate;
++
++			// we probably should make sure the buffer sizes are in accordance.
++			//	assert(maxBufferSize == dataBufferSize);
++
++			// We do not need the ExtAudioFile so we will set it to null
++			extFile = null;
++			return pcmData;
++
++		}
++
++		public static byte[] LoadFromFile (string filename, out int dataBufferSize, out ALFormat alFormat, out double sampleRate, out double duration)
++		{
++
++			return OpenALSupport.GetOpenALAudioDataAll (NSUrl.FromFilename (filename),
++			                                    out dataBufferSize, out alFormat, out sampleRate, out duration);
++		}
++
++
++	}
++}
++
+diff --git a/MonoGame.Framework/MacOS/Audio/Sound.cs b/MonoGame.Framework/MacOS/Audio/Sound.cs
+deleted file mode 100644
+index 1c2cf83..0000000
+--- a/MonoGame.Framework/MacOS/Audio/Sound.cs
++++ /dev/null
+@@ -1,196 +0,0 @@
+-/*
+-	Sound.cs
+-	 
+-	Author:
+-	      Christian Beaumont chris@foundation42.org (http://www.foundation42.com)
+-	
+-	Copyright (c) 2009 Foundation42 LLC
+-	
+-	Permission is hereby granted, free of charge, to any person obtaining a copy
+-	of this software and associated documentation files (the "Software"), to deal
+-	in the Software without restriction, including without limitation the rights
+-	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-	copies of the Software, and to permit persons to whom the Software is
+-	furnished to do so, subject to the following conditions:
+-	
+-	The above copyright notice and this permission notice shall be included in
+-	all copies or substantial portions of the Software.
+-	
+-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+-	THE SOFTWARE.
+-*/
+-
+-using System;
+-using System.Text;
+-using System.Threading;
+-using System.Diagnostics;
+-using System.Runtime.InteropServices;
+-using System.Collections.Generic;
+-
+-using MonoMac;
+-using MonoMac.AppKit;
+-using MonoMac.Foundation;	
+-using MonoMac.AudioToolbox;
+-using MonoMac.AudioUnit;
+-
+-namespace Microsoft.Xna.Framework.Audio
+-{	
+-	internal class Sound : IDisposable
+-	{	
+-		private NSSound _audioPlayer;
+-		
+-		public Sound()
+-		{
+-		}
+-		
+-		public Sound(string url, float volume, bool looping)
+-		{			
+-			var data = NSData.FromUrl(NSUrl.FromFilename(url));
+-			_audioPlayer = new NSSound(data);
+-			_audioPlayer.Volume = volume;
+-			_audioPlayer.Loops = looping;
+-			
+-		}
+-		
+-		public Sound(byte[] audiodata, float volume, bool looping) {
+-			var data = NSData.FromArray(audiodata);
+-			_audioPlayer = new NSSound(data);
+-			_audioPlayer.Volume = volume;
+-			_audioPlayer.Loops = looping;
+-		}
+-		
+-		~Sound()
+-		{
+-			Dispose();	
+-		}
+-		
+-		public void Dispose()
+-		{
+-			_audioPlayer.Dispose();
+-		}
+-		
+-		public double Duration
+-		{
+-			get
+-			{
+-				return _audioPlayer.Duration();
+-			}
+-		}
+-		
+-		public double CurrentPosition
+-		{
+-			get
+-			{
+-				return _audioPlayer.CurrentTime;
+-			}
+-			set
+-			{
+-				_audioPlayer.CurrentTime = value;
+-			}
+-		}
+-			
+-		public bool Looping
+-		{
+-			get
+-			{
+-				return _audioPlayer.Loops;
+-			}
+-			set
+-			{
+-				_audioPlayer.Loops = value;
+-			}
+-		}
+-		
+-		public float Pan
+-		{
+-			get;
+-			set;
+-		}
+-		
+-		public bool Playing
+-		{
+-			get
+-			{
+-				return _audioPlayer.IsPlaying();
+-			}
+-			set
+-			{
+-				if ( value )
+-				{
+-					if (!_audioPlayer.IsPlaying())
+-					{
+-						Play();
+-					}
+-				}
+-				else
+-				{
+-					if (_audioPlayer.IsPlaying())
+-					{
+-						Stop();
+-					}
+-				}
+-			}
+-		}
+-		
+-		public float Rate 
+-		{ 
+-			get; 
+-			set; 
+-		}
+-		
+-		public void Pause()
+-		{		
+-			//HACK: Stopping or pausing NSSound is really slow (~200ms), don't if the sample is short :/
+-			//Uncomment the if clause if you have trouble pausing sounds.
+-			//if (Duration > 2) {
+-				_audioPlayer.Pause();
+-			//}
+-		}
+-		
+-		public void Play()
+-		{		
+-			_audioPlayer.Play();
+-		}
+-		
+-		public void Resume()
+-		{
+-			_audioPlayer.Resume();
+-		}
+-		
+-		public void Stop()
+-		{
+-			//HACK: Stopping or pausing NSSound is really slow (~200ms), don't if the sample is short :/
+-			//Uncomment the if clause if you have trouble with stopping sounds.
+-			//Note that with the if active it is impossible to stop looped sounds that are shorter than x seconds!
+-			//if (Duration > 2) { 
+-				_audioPlayer.Stop();
+-			//}
+-		}
+-		
+-		public float Volume
+-		{
+-			get
+-			{
+-				return _audioPlayer.Volume;
+-			}
+-			set
+-			{
+-				_audioPlayer.Volume = value;
+-			}
+-		}
+-		
+-		public static Sound CreateAndPlay(string url, float volume, bool looping)
+-		{
+-			Sound sound = new Sound(url, volume, looping);
+-			
+-			sound.Play();
+-			
+-			return sound;
+-		}
+-	}
+-}
+diff --git a/MonoGame.Framework/MacOS/Audio/SoundEffect.cs b/MonoGame.Framework/MacOS/Audio/SoundEffect.cs
+new file mode 100755
+index 0000000..67a731d
+--- /dev/null
++++ b/MonoGame.Framework/MacOS/Audio/SoundEffect.cs
+@@ -0,0 +1,249 @@
++#region License
++/*
++Microsoft Public License (Ms-PL)
++MonoGame - Copyright © 2009 The MonoGame Team
++
++All rights reserved.
++
++This license governs use of the accompanying software. If you use the software, you accept this license. If you do not
++accept the license, do not use the software.
++
++1. Definitions
++The terms "reproduce," "reproduction," "derivative works," and "distribution" have the same meaning here as under 
++U.S. copyright law.
++
++A "contribution" is the original software, or any additions or changes to the software.
++A "contributor" is any person that distributes its contribution under this license.
++"Licensed patents" are a contributor's patent claims that read directly on its contribution.
++
++2. Grant of Rights
++(A) Copyright Grant- Subject to the terms of this license, including the license conditions and limitations in section 3, 
++each contributor grants you a non-exclusive, worldwide, royalty-free copyright license to reproduce its contribution, prepare derivative works of its contribution, and distribute its contribution or any derivative works that you create.
++(B) Patent Grant- Subject to the terms of this license, including the license conditions and limitations in section 3, 
++each contributor grants you a non-exclusive, worldwide, royalty-free license under its licensed patents to make, have made, use, sell, offer for sale, import, and/or otherwise dispose of its contribution in the software or derivative works of the contribution in the software.
++
++3. Conditions and Limitations
++(A) No Trademark License- This license does not grant you rights to use any contributors' name, logo, or trademarks.
++(B) If you bring a patent claim against any contributor over patents that you claim are infringed by the software, 
++your patent license from such contributor to the software ends automatically.
++(C) If you distribute any portion of the software, you must retain all copyright, patent, trademark, and attribution 
++notices that are present in the software.
++(D) If you distribute any portion of the software in source code form, you may do so only under this license by including 
++a complete copy of this license with your distribution. If you distribute any portion of the software in compiled or object 
++code form, you may only do so under a license that complies with this license.
++(E) The software is licensed "as-is." You bear the risk of using it. The contributors give no express warranties, guarantees
++or conditions. You may have additional consumer rights under your local laws which this license cannot change. To the extent
++permitted under your local laws, the contributors exclude the implied warranties of merchantability, fitness for a particular
++purpose and non-infringement.
++*/
++#endregion License
++﻿
++using System;
++using System.IO;
++using System.Runtime.InteropServices;
++
++using Microsoft.Xna;
++using Microsoft.Xna.Framework;
++using Microsoft.Xna.Framework.Audio;
++
++//using MonoMac.AudioToolbox;
++//using MonoMac.AudioUnit;
++//using MonoMac.AudioUnitWrapper;
++using MonoMac.AudioToolbox;
++using MonoMac.AudioUnit;
++
++using MonoMac.OpenAL;
++
++namespace Microsoft.Xna.Framework.Audio
++{
++	public sealed partial class SoundEffect : IDisposable
++	{
++		private string _name = "";
++		private string _filename = "";
++		internal byte[] _data;
++
++		internal float Rate { get; set; }
++		internal ALFormat Format { get; set; }
++		internal int Size { get; set; }
++
++
++		internal SoundEffect (string fileName)
++		{
++			_filename = fileName;
++
++			if (_filename == string.Empty) {
++				throw new FileNotFoundException ("Supported Sound Effect formats are wav, mp3, acc, aiff");
++			}
++
++			int size;
++			ALFormat format;
++			double rate;
++			double duration;
++
++			_data = OpenALSupport.LoadFromFile(_filename,
++			                                    out size, out format, out rate, out duration);
++
++			_name = Path.GetFileNameWithoutExtension (fileName);
++
++			Rate = (float)rate;
++			Size = size;
++			Format = format;
++			_duration = TimeSpan.FromSeconds(duration);
++			//Console.WriteLine ("From File: " + _name + " - " + Format + " = " + Rate + " / " + Size + " -- "  + Duration);
++
++		}
++
++		//SoundEffect from playable audio data
++		internal SoundEffect (string name, byte[] data)
++		{
++			_data = data;
++			_name = name;
++			LoadAudioStream(_data);
++
++		}
++
++		public SoundEffect (byte[] buffer, int sampleRate, AudioChannels channels)
++		{
++			//buffer should contain 16-bit PCM wave data
++			short bitsPerSample = 16;
++
++			MemoryStream mStream = new MemoryStream (44 + buffer.Length);
++			BinaryWriter writer = new BinaryWriter (mStream);
++
++			writer.Write ("RIFF".ToCharArray ()); //chunk id
++			writer.Write ((int)(36 + buffer.Length)); //chunk size
++			writer.Write ("WAVE".ToCharArray ()); //RIFF type
++
++			writer.Write ("fmt ".ToCharArray ()); //chunk id
++			writer.Write ((int)16); //format header size
++			writer.Write ((short)1); //format (PCM)
++			writer.Write ((short)channels);
++			writer.Write ((int)sampleRate);
++			short blockAlign = (short)((bitsPerSample / 8) * (int)channels);
++			writer.Write ((int)(sampleRate * blockAlign)); //byte rate
++			writer.Write ((short)blockAlign);
++			writer.Write ((short)bitsPerSample);
++
++			writer.Write ("data".ToCharArray ()); //chunk id
++			writer.Write ((int)buffer.Length); //data size
++			writer.Write (buffer);
++
++			writer.Close ();
++			mStream.Close ();
++
++			_data = mStream.ToArray ();
++			_name = "";
++
++			LoadAudioStream(_data);
++
++		}
++
++		void LoadAudioStream(byte[] audiodata) {
++			AudioFileStream afs = new AudioFileStream (AudioFileType.WAVE);
++			//long pac = afs.DataPacketCount;
++			afs.PacketDecoded += HandlePacketDecoded;
++
++			afs.ParseBytes (audiodata, false);
++			afs.Close();
++		}
++
++		void HandlePacketDecoded (object sender, PacketReceivedEventArgs e)
++		{
++			AudioFileStream afs = (AudioFileStream)sender;
++			byte[] audioData = new byte[e.Bytes];
++			Marshal.Copy (e.InputData, audioData, 0, e.Bytes);
++			//Console.WriteLine ("Packet decoded ");
++			AudioStreamBasicDescription asbd = afs.StreamBasicDescription;
++
++			Rate = (float)asbd.SampleRate;
++			Size = e.Bytes;
++
++			if (asbd.ChannelsPerFrame == 1) {
++				if (asbd.BitsPerChannel == 8) {
++					Format = ALFormat.Mono8;
++				} else {
++					Format = ALFormat.Mono16;
++				}
++			} else {
++				if (asbd.BitsPerChannel == 8) {
++					Format = ALFormat.Stereo8;
++				} else {
++					Format = ALFormat.Stereo16;
++				}
++			}
++			_data = audioData;
++
++			var _dblDuration = (e.Bytes / ((asbd.BitsPerChannel / 8) * asbd.ChannelsPerFrame)) / asbd.SampleRate;
++			_duration = TimeSpan.FromSeconds(_dblDuration);
++//			Console.WriteLine ("From Data: " + _name + " - " + Format + " = " + Rate + " / " + Size + " -- "  + Duration);
++//			Console.WriteLine("Duration: " + _dblDuration
++//			                  		+ " / size: " + e.Bytes
++//			                  		+ " bits: " + asbd.BitsPerChannel
++//			                  		+ " channels: " + asbd.ChannelsPerFrame
++//			                  		+ " rate: " + asbd.SampleRate);
++		}
++
++		//double _dblDuration = 0;
++		TimeSpan _duration = TimeSpan.Zero;
++		public bool Play ()
++		{
++			return Play (MasterVolume, 1.0f, 0.0f);
++		}
++
++		public bool Play (float volume, float pitch, float pan)
++		{
++			if (MasterVolume > 0.0f) {
++				SoundEffectInstance instance = CreateInstance ();
++				instance.Volume = volume;
++				instance.Pitch = pitch;
++				instance.Pan = pan;
++				instance.Play ();
++			}
++			return false;
++		}
++
++		public TimeSpan Duration {
++			get {
++
++				return _duration;
++			}
++		}
++
++		public string Name {
++			get {
++				return _name;
++			}
++			set {
++				_name = value;
++			}
++		}
++		
++		public SoundEffectInstance CreateInstance ()
++		{
++			var instance = new SoundEffectInstance (this);
++			return instance;
++		}
++		
++		#region IDisposable Members
++
++		public void Dispose ()
++		{
++			//_sound.Dispose ();
++		}
++
++		#endregion
++		
++		static float _masterVolume = 1.0f;
++
++		public static float MasterVolume { 
++			get {
++				return _masterVolume;
++			}
++			set {
++				_masterVolume = value;	
++			}
++		}
++				
++	}
++}
++
+diff --git a/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs b/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
+new file mode 100755
+index 0000000..82ddd86
+--- /dev/null
++++ b/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
+@@ -0,0 +1,241 @@
++#region License
++// /*
++// Microsoft Public License (Ms-PL)
++// MonoGame - Copyright © 2009 The MonoGame Team
++// 
++// All rights reserved.
++// 
++// This license governs use of the accompanying software. If you use the software, you accept this license. If you do not
++// accept the license, do not use the software.
++// 
++// 1. Definitions
++// The terms "reproduce," "reproduction," "derivative works," and "distribution" have the same meaning here as under
++// U.S. copyright law.
++// 
++// A "contribution" is the original software, or any additions or changes to the software.
++// A "contributor" is any person that distributes its contribution under this license.
++// "Licensed patents" are a contributor's patent claims that read directly on its contribution.
++// 
++// 2. Grant of Rights
++// (A) Copyright Grant- Subject to the terms of this license, including the license conditions and limitations in section 3, 
++// each contributor grants you a non-exclusive, worldwide, royalty-free copyright license to reproduce its contribution, prepare derivative works of its contribution, and distribute its contribution or any derivative works that you create.
++// (B) Patent Grant- Subject to the terms of this license, including the license conditions and limitations in section 3, 
++// each contributor grants you a non-exclusive, worldwide, royalty-free license under its licensed patents to make, have made, use, sell, offer for sale, import, and/or otherwise dispose of its contribution in the software or derivative works of the contribution in the software.
++// 
++// 3. Conditions and Limitations
++// (A) No Trademark License- This license does not grant you rights to use any contributors' name, logo, or trademarks.
++// (B) If you bring a patent claim against any contributor over patents that you claim are infringed by the software, 
++// your patent license from such contributor to the software ends automatically.
++// (C) If you distribute any portion of the software, you must retain all copyright, patent, trademark, and attribution 
++// notices that are present in the software.
++// (D) If you distribute any portion of the software in source code form, you may do so only under this license by including 
++// a complete copy of this license with your distribution. If you distribute any portion of the software in compiled or object 
++// code form, you may only do so under a license that complies with this license.
++// (E) The software is licensed "as-is." You bear the risk of using it. The contributors give no express warranties, guarantees
++// or conditions. You may have additional consumer rights under your local laws which this license cannot change. To the extent
++// permitted under your local laws, the contributors exclude the implied warranties of merchantability, fitness for a particular
++// purpose and non-infringement.
++// */
++#endregion License
++
++#region Using Statements
++using System;
++
++using MonoMac.OpenAL;
++
++#endregion Statements
++
++namespace Microsoft.Xna.Framework.Audio
++{
++	public sealed class SoundEffectInstance : IDisposable
++	{
++		private bool isDisposed = false;
++		private SoundState soundState = SoundState.Stopped;
++		private OALSoundBuffer soundBuffer;
++		private OpenALSoundController controller;
++		private SoundEffect soundEffect;
++
++		float _volume = 1.0f;
++		bool _looped = false;
++		float _pan = 0;
++		float _pitch = 1.0f;
++
++		bool hasSourceId = false;
++		int sourceId;
++
++		public SoundEffectInstance (SoundEffect parent)
++		{
++			this.soundEffect = parent;
++			InitializeSound ();
++		}
++
++		private void InitializeSound ()
++		{
++			controller = OpenALSoundController.GetInstance;
++			soundBuffer = new OALSoundBuffer ();
++			soundBuffer.BindDataBuffer (soundEffect._data, soundEffect.Format, soundEffect.Size, (int)soundEffect.Rate);
++			soundBuffer.Reserved += HandleSoundBufferReserved;
++			soundBuffer.Recycled += HandleSoundBufferRecycled;
++
++		}
++
++		void HandleSoundBufferRecycled (object sender, EventArgs e)
++		{
++			sourceId = 0;
++			hasSourceId = false;
++			//Console.WriteLine ("recycled: " + soundEffect.Name);
++		}
++
++		void HandleSoundBufferReserved (object sender, EventArgs e)
++		{
++			sourceId = soundBuffer.SourceId;
++			hasSourceId = true;
++		}
++
++		public void Dispose ()
++		{
++			soundBuffer.Reserved -= HandleSoundBufferReserved;
++			soundBuffer.Recycled -= HandleSoundBufferRecycled;
++			soundBuffer.Dispose ();
++			soundBuffer = null;
++			isDisposed = true;
++		}
++		
++		public void Apply3D (AudioListener listener, AudioEmitter emitter)
++		{
++			throw new NotImplementedException ();
++		}
++		
++		public void Apply3D (AudioListener[] listeners, AudioEmitter emitter)
++		{
++			throw new NotImplementedException ();
++		}
++
++		public void Pause ()
++		{
++			if (hasSourceId) {
++				controller.PauseSound (soundBuffer);
++				soundState = SoundState.Paused;
++			}
++		}
++
++		private void ApplyState ()
++		{
++			if (!hasSourceId)
++				return;
++			// Distance Model
++			AL.DistanceModel (ALDistanceModel.InverseDistanceClamped);
++			// Listener
++			// Pan
++			AL.Source (sourceId, ALSource3f.Position, _pan, 0, 0);
++			// Volume
++			AL.Source (sourceId, ALSourcef.Gain, _volume);
++			// Looping
++			AL.Source (sourceId, ALSourceb.Looping, IsLooped);
++			// Pitch
++			AL.Source (sourceId, ALSourcef.Pitch, _pitch);
++		}
++
++		public void Play ()
++		{
++			int bufferId = soundBuffer.OpenALDataBuffer;
++			if (hasSourceId) {
++				return;
++			}
++			bool isSourceAvailable = controller.ReserveSource (soundBuffer);
++			if (!isSourceAvailable)
++				return;
++
++			AL.Source (soundBuffer.SourceId, ALSourcei.Buffer, bufferId);
++			ApplyState ();
++
++			controller.PlaySound (soundBuffer);
++			//Console.WriteLine ("playing: " + sourceId + " : " + soundEffect.Name);
++			soundState = SoundState.Playing;
++		}
++
++		public void Resume ()
++		{
++			Play ();
++		}
++
++		public void Stop ()
++		{
++			if (hasSourceId) {
++				//Console.WriteLine ("stop " + sourceId + " : " + soundEffect.Name);
++				controller.StopSound (soundBuffer);
++			}
++			soundState = SoundState.Stopped;
++		}
++
++		public void Stop (bool immediate)
++		{
++			Stop ();
++		}
++
++		public bool IsDisposed {
++			get {
++				return isDisposed;
++			}
++		}
++
++		public bool IsLooped {
++			get {
++				return _looped;
++			}
++
++			set {
++				_looped = value;
++			}
++		}
++
++		public float Pan {
++			get {
++				return _pan;
++			}
++
++			set {
++				_pan = value;
++			}
++		}
++
++		public float Pitch {
++			get {
++				return _pitch;
++			}
++			set {
++				_pitch = value;
++			}
++		}
++
++		private byte[] audioData;
++
++		internal byte[] EffectData {
++			get {
++				return audioData;
++			}
++
++			set {
++				audioData = value;
++			}
++		}
++
++		public SoundState State {
++			get {
++				return soundState;
++			}
++		}
++
++		public float Volume {
++			get {
++				return _volume;
++			}
++			
++			set {
++				_volume = value;
++			}
++		}	
++		
++		
++	}
++}
+diff --git a/MonoGame.Framework/MacOS/MacGamePlatform.cs b/MonoGame.Framework/MacOS/MacGamePlatform.cs
+index 662149b..cd74478 100644
+--- a/MonoGame.Framework/MacOS/MacGamePlatform.cs
++++ b/MonoGame.Framework/MacOS/MacGamePlatform.cs
+@@ -83,12 +83,16 @@ class MacGamePlatform : GamePlatform
+         private MacGameNSWindow _mainWindow;
+         private GameWindow _gameWindow;
+         private bool _wasResizeable;
++	Microsoft.Xna.Framework.Audio.OpenALSoundController soundControllerInstance = null;
+ 
+         public MacGamePlatform(Game game) :
+             base(game)
+         {
+             game.Services.AddService(typeof(MacGamePlatform), this);
+ 
++			// Setup our OpenALSoundController to handle our SoundBuffer pools
++			soundControllerInstance = Microsoft.Xna.Framework.Audio.OpenALSoundController.GetInstance;
++
+             RectangleF frame = new RectangleF(
+                 0, 0,
+                 PresentationParameters._defaultBackBufferWidth,
+@@ -179,6 +183,8 @@ public override void StartRunLoop()
+ 
+         public override bool BeforeUpdate(GameTime gameTime)
+         {
++		// Update our OpenAL sound buffer pools
++		soundControllerInstance.Update();
+             if (IsPlayingVideo)
+                 return false;
+             return true;
+diff --git a/MonoGame.Framework/Media/Song.cs b/MonoGame.Framework/Media/Song.cs
+old mode 100644
+new mode 100755
+index 737f667..c71770d
+--- a/MonoGame.Framework/Media/Song.cs
++++ b/MonoGame.Framework/Media/Song.cs
+@@ -47,14 +47,14 @@ namespace Microsoft.Xna.Framework.Media
+ {
+     public class Song : IEquatable<Song>, IDisposable
+     {
+-		private Sound _sound;
++		private SoundEffectInstance _sound;
+ 		private string _name;
+ 		private int _playCount;
+ 		
+ 		internal Song(string fileName)
+ 		{			
+ 			_name = fileName;
+-			_sound = new Sound(_name, 1.0f, true);
++			_sound = new SoundEffect(_name).CreateInstance();
+ 		}
+ 		
+ 		public void Dispose()
+@@ -136,7 +136,7 @@ internal bool Loop
+ 			{
+ 				if ( _sound != null )
+ 				{
+-					return _sound.Looping;
++					return _sound.IsLooped;
+ 				}
+ 				else
+ 				{
+@@ -147,9 +147,9 @@ internal bool Loop
+ 			{
+ 				if ( _sound != null )
+ 				{
+-					if ( _sound.Looping != value )
++					if ( _sound.IsLooped != value )
+ 					{
+-						_sound.Looping = value;
++						_sound.IsLooped = value;
+ 					}
+ 				}
+ 			}
+@@ -187,12 +187,14 @@ public TimeSpan Duration
+             {
+ 				if ( _sound != null )
+ 				{
+-					return new TimeSpan(0,0,(int)_sound.Duration);
++					//return new TimeSpan(0,0,(int)_sound.Duration);
++					return new TimeSpan(0);
+ 				}
+ 				else
+ 				{
+ 					return new TimeSpan(0);
+ 				}
++				
+             }
+         }
+ 		
+@@ -202,7 +204,8 @@ public TimeSpan Position
+             {
+ 				if ( _sound != null )
+ 				{
+-					return new TimeSpan(0,0,(int)_sound.CurrentPosition);
++					//return new TimeSpan(0,0,(int)_sound.CurrentPosition);
++					return new TimeSpan(0);
+ 				}
+ 				else
+ 				{
+diff --git a/MonoGame.Framework/MonoGame.Framework.MacOS.csproj b/MonoGame.Framework/MonoGame.Framework.MacOS.csproj
+index f7e855f..9eb02e2 100644
+--- a/MonoGame.Framework/MonoGame.Framework.MacOS.csproj
++++ b/MonoGame.Framework/MonoGame.Framework.MacOS.csproj
+@@ -134,9 +134,6 @@
+     <Compile Include="Storage\StorageContainer.cs" />
+     <Compile Include="Storage\StorageDevice.cs" />
+     <Compile Include="Audio\AudioChannels.cs" />
+-    <Compile Include="MacOS\Audio\Sound.cs" />
+-    <Compile Include="Audio\SoundEffect.cs" />
+-    <Compile Include="Audio\SoundEffectInstance.cs" />
+     <Compile Include="Media\MediaPlayer.cs" />
+     <Compile Include="Media\Song.cs" />
+     <Compile Include="Media\MediaState.cs" />
+@@ -348,6 +345,11 @@
+     <Compile Include="Game.cs" />
+     <Compile Include="GamePlatform.cs" />
+     <Compile Include="MacOS\MacGamePlatform.cs" />
++    <Compile Include="MacOS\Audio\OALSoundBuffer.cs" />
++    <Compile Include="MacOS\Audio\OpenALSoundController.cs" />
++    <Compile Include="MacOS\Audio\OpenALSupport.cs" />
++    <Compile Include="MacOS\Audio\SoundEffect.cs" />
++    <Compile Include="MacOS\Audio\SoundEffectInstance.cs" />
+   </ItemGroup>
+   <ItemGroup>
+     <Folder Include="MacOS\" />
+-- 
+1.7.5.4
+
+
+From adf3fc8ca56b8e3d0fb104cf4444ca694c285ec7 Mon Sep 17 00:00:00 2001
+From: Kenneth Pouncey <kjpou@pt.lu>
+Date: Tue, 3 Jan 2012 15:14:26 +0100
+Subject: [PATCH 2/9] Added support for OpenAL based sound to iOS
+
+---
+ MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs   |    5 +
+ .../MacOS/Audio/OpenALSoundController.cs           |    7 +-
+ MonoGame.Framework/MacOS/Audio/OpenALSupport.cs    |   18 ++-
+ MonoGame.Framework/MacOS/Audio/SoundEffect.cs      |   10 +-
+ .../MacOS/Audio/SoundEffectInstance.cs             |    4 +
+ MonoGame.Framework/MacOS/MacGamePlatform.cs        |    5 +-
+ MonoGame.Framework/MonoGame.Framework.iOS.csproj   |   18 ++-
+ MonoGame.Framework/iOS/Audio/Sound.cs              |  205 --------------------
+ MonoGame.Framework/iOS/iOSGamePlatform.cs          |    7 +
+ 9 files changed, 59 insertions(+), 220 deletions(-)
+ delete mode 100644 MonoGame.Framework/iOS/Audio/Sound.cs
+
+diff --git a/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs b/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs
+index 940723a..5137521 100755
+--- a/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs
++++ b/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs
+@@ -1,6 +1,11 @@
+ using System;
+ 
++#if IPHONE
++using OpenTK.Audio.OpenAL;
++#elif MONOMAC
+ using MonoMac.OpenAL;
++#endif
++
+ 
+ namespace Microsoft.Xna.Framework.Audio
+ {
+diff --git a/MonoGame.Framework/MacOS/Audio/OpenALSoundController.cs b/MonoGame.Framework/MacOS/Audio/OpenALSoundController.cs
+index 29b0bdd..7433382 100755
+--- a/MonoGame.Framework/MacOS/Audio/OpenALSoundController.cs
++++ b/MonoGame.Framework/MacOS/Audio/OpenALSoundController.cs
+@@ -4,9 +4,12 @@
+ using System.IO;
+ using System.Runtime.InteropServices;
+ 
+-//using MonoMac.AudioToolbox;
+-//using MonoMac.AudioUnit;
++#if IPHONE
++using OpenTK.Audio.OpenAL;
++using OpenTK;
++#elif MONOMAC
+ using MonoMac.OpenAL;
++#endif
+ 
+ namespace Microsoft.Xna.Framework.Audio
+ {
+diff --git a/MonoGame.Framework/MacOS/Audio/OpenALSupport.cs b/MonoGame.Framework/MacOS/Audio/OpenALSupport.cs
+index 1c5bdde..9b0d700 100755
+--- a/MonoGame.Framework/MacOS/Audio/OpenALSupport.cs
++++ b/MonoGame.Framework/MacOS/Audio/OpenALSupport.cs
+@@ -1,19 +1,27 @@
+ using System;
+ using System.Runtime.InteropServices;
+ 
++#if IPHONE
++using MonoTouch.UIKit;
++using MonoTouch.Foundation;
++using MonoTouch.CoreFoundation;
++using MonoTouch.AudioToolbox;
++using MonoTouch.AudioUnit;
++
++using OpenTK.Audio.OpenAL;
++
++#elif MONOMAC
++
+ using MonoMac.AppKit;
+ using MonoMac.Foundation;
+ using MonoMac.CoreFoundation;
+ using MonoMac.AudioToolbox;
+ using MonoMac.AudioUnit;
+-//using MonoTouch.UIKit;
+-//using MonoTouch.Foundation;
+-//using MonoTouch.CoreFoundation;
+-//using MonoTouch.AudioToolbox;
+-//using MonoTouch.AudioUnit;
+ 
+ using MonoMac.OpenAL;
+ 
++#endif
++
+ namespace Microsoft.Xna.Framework.Audio
+ {
+ 	internal static class OpenALSupport
+diff --git a/MonoGame.Framework/MacOS/Audio/SoundEffect.cs b/MonoGame.Framework/MacOS/Audio/SoundEffect.cs
+index 67a731d..4318c59 100755
+--- a/MonoGame.Framework/MacOS/Audio/SoundEffect.cs
++++ b/MonoGame.Framework/MacOS/Audio/SoundEffect.cs
+@@ -46,13 +46,17 @@ 1. Definitions
+ using Microsoft.Xna.Framework;
+ using Microsoft.Xna.Framework.Audio;
+ 
+-//using MonoMac.AudioToolbox;
+-//using MonoMac.AudioUnit;
+-//using MonoMac.AudioUnitWrapper;
++#if IPHONE
++using MonoTouch.AudioToolbox;
++using MonoTouch.AudioUnit;
++
++using OpenTK.Audio.OpenAL;
++#elif MONOMAC
+ using MonoMac.AudioToolbox;
+ using MonoMac.AudioUnit;
+ 
+ using MonoMac.OpenAL;
++#endif
+ 
+ namespace Microsoft.Xna.Framework.Audio
+ {
+diff --git a/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs b/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
+index 82ddd86..a4b45db 100755
+--- a/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
++++ b/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
+@@ -41,7 +41,11 @@
+ #region Using Statements
+ using System;
+ 
++#if IPHONE
++using OpenTK.Audio.OpenAL;
++#elif MONOMAC
+ using MonoMac.OpenAL;
++#endif
+ 
+ #endregion Statements
+ 
+diff --git a/MonoGame.Framework/MacOS/MacGamePlatform.cs b/MonoGame.Framework/MacOS/MacGamePlatform.cs
+index cd74478..267ee32 100644
+--- a/MonoGame.Framework/MacOS/MacGamePlatform.cs
++++ b/MonoGame.Framework/MacOS/MacGamePlatform.cs
+@@ -75,6 +75,7 @@ 1. Definitions
+ using MonoMac.AppKit;
+ using MonoMac.Foundation;
+ using Microsoft.Xna.Framework.Input;
++using Microsoft.Xna.Framework.Audio;
+ 
+ namespace Microsoft.Xna.Framework
+ {
+@@ -83,7 +84,7 @@ class MacGamePlatform : GamePlatform
+         private MacGameNSWindow _mainWindow;
+         private GameWindow _gameWindow;
+         private bool _wasResizeable;
+-	Microsoft.Xna.Framework.Audio.OpenALSoundController soundControllerInstance = null;
++	private OpenALSoundController soundControllerInstance = null;
+ 
+         public MacGamePlatform(Game game) :
+             base(game)
+@@ -91,7 +92,7 @@ class MacGamePlatform : GamePlatform
+             game.Services.AddService(typeof(MacGamePlatform), this);
+ 
+ 			// Setup our OpenALSoundController to handle our SoundBuffer pools
+-			soundControllerInstance = Microsoft.Xna.Framework.Audio.OpenALSoundController.GetInstance;
++			soundControllerInstance = OpenALSoundController.GetInstance;
+ 
+             RectangleF frame = new RectangleF(
+                 0, 0,
+diff --git a/MonoGame.Framework/MonoGame.Framework.iOS.csproj b/MonoGame.Framework/MonoGame.Framework.iOS.csproj
+index d12d841..4b04f49 100644
+--- a/MonoGame.Framework/MonoGame.Framework.iOS.csproj
++++ b/MonoGame.Framework/MonoGame.Framework.iOS.csproj
+@@ -154,7 +154,6 @@
+     <Compile Include="Input\Mouse.cs" />
+     <Compile Include="Input\MouseState.cs" />
+     <Compile Include="Audio\AudioChannels.cs" />
+-    <Compile Include="Audio\SoundEffect.cs" />
+     <Compile Include="Audio\SoundState.cs" />
+     <Compile Include="Media\MediaPlayer.cs" />
+     <Compile Include="Media\MediaState.cs" />
+@@ -199,7 +198,6 @@
+     <Compile Include="Input\KeyboardState.cs" />
+     <Compile Include="Input\Keys.cs" />
+     <Compile Include="Input\Keyboard.cs" />
+-    <Compile Include="Audio\SoundEffectInstance.cs" />
+     <Compile Include="Input\KeyState.cs" />
+     <Compile Include="IUpdateable.cs" />
+     <Compile Include="Net\NetworkSessionJoinError.cs" />
+@@ -335,7 +333,6 @@
+     <Compile Include="iOS\Input\GamePad.cs" />
+     <Compile Include="iOS\IOSGameWindow.cs" />
+     <Compile Include="iOS\PowerStatus.cs" />
+-    <Compile Include="iOS\Audio\Sound.cs" />
+     <Compile Include="iOS\Media\MediaSource.cs" />
+     <Compile Include="iOS\Media\MediaLibrary.cs" />
+     <Compile Include="iOS\Input\Accelerometer.cs" />
+@@ -366,6 +363,21 @@
+     <Compile Include="iOS\iOSGamePlatform.cs" />
+     <Compile Include="iOS\iOSGameViewController.cs" />
+     <Compile Include="iOS\OrientationConverter.cs" />
++    <Compile Include="MacOS\Audio\OALSoundBuffer.cs">
++      <Link>iOS\Audio\OALSoundBuffer.cs</Link>
++    </Compile>
++    <Compile Include="MacOS\Audio\OpenALSoundController.cs">
++      <Link>iOS\Audio\OpenALSoundController.cs</Link>
++    </Compile>
++    <Compile Include="MacOS\Audio\OpenALSupport.cs">
++      <Link>iOS\Audio\OpenALSupport.cs</Link>
++    </Compile>
++    <Compile Include="MacOS\Audio\SoundEffect.cs">
++      <Link>iOS\Audio\SoundEffect.cs</Link>
++    </Compile>
++    <Compile Include="MacOS\Audio\SoundEffectInstance.cs">
++      <Link>iOS\Audio\SoundEffectInstance.cs</Link>
++    </Compile>
+   </ItemGroup>
+   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+   <ProjectExtensions>
+diff --git a/MonoGame.Framework/iOS/Audio/Sound.cs b/MonoGame.Framework/iOS/Audio/Sound.cs
+deleted file mode 100644
+index 5e5b995..0000000
+--- a/MonoGame.Framework/iOS/Audio/Sound.cs
++++ /dev/null
+@@ -1,205 +0,0 @@
+-/*
+-	Sound.cs
+-	 
+-	Author:
+-	      Christian Beaumont chris@foundation42.org (http://www.foundation42.com)
+-	
+-	Copyright (c) 2009 Foundation42 LLC
+-	
+-	Permission is hereby granted, free of charge, to any person obtaining a copy
+-	of this software and associated documentation files (the "Software"), to deal
+-	in the Software without restriction, including without limitation the rights
+-	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-	copies of the Software, and to permit persons to whom the Software is
+-	furnished to do so, subject to the following conditions:
+-	
+-	The above copyright notice and this permission notice shall be included in
+-	all copies or substantial portions of the Software.
+-	
+-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+-	THE SOFTWARE.
+-*/
+-
+-using System;
+-using System.Text;
+-using System.Threading;
+-using System.Diagnostics;
+-using System.Runtime.InteropServices;
+-using System.Collections.Generic;
+-
+-using MonoTouch;
+-using MonoTouch.Foundation;	
+-using MonoTouch.AVFoundation;
+-
+-namespace Microsoft.Xna.Framework.Audio
+-{	
+-	internal class Sound : IDisposable
+-	{	
+-		private AVAudioPlayer _audioPlayer;
+-		
+-		public Sound()
+-		{
+-		}
+-		
+-		public Sound(string url, float volume, bool looping)
+-		{
+-			var mediaFile = NSUrl.FromFilename(url);			
+-			_audioPlayer =  AVAudioPlayer.FromUrl(mediaFile); 
+-			_audioPlayer.Volume = volume;
+-			if ( looping )
+-			{
+-				_audioPlayer.NumberOfLoops = -1;
+-			}
+-			else
+-			{
+-				_audioPlayer.NumberOfLoops = 0;
+-			}
+-			
+-			if (!_audioPlayer.PrepareToPlay())
+-			{
+-				throw new Exception("Unable to Prepare sound for playback!");
+-			}
+-		}
+-		
+-		public Sound(byte[] audiodata, float volume, bool looping)
+-		{
+-			var data = NSData.FromArray(audiodata);
+-			_audioPlayer = AVAudioPlayer.FromData(data);
+-			_audioPlayer.Volume = volume;
+-			if ( looping )
+-			{
+-				_audioPlayer.NumberOfLoops = -1;
+-			}
+-			else
+-			{
+-				_audioPlayer.NumberOfLoops = 0;
+-			}
+-			
+-			if (!_audioPlayer.PrepareToPlay())
+-			{
+-				throw new Exception("Unable to Prepare sound for playback!");
+-			}
+-		}
+-		
+-		~Sound()
+-		{
+-			Dispose();	
+-		}
+-		
+-		public void Dispose()
+-		{
+-			_audioPlayer.Dispose();
+-		}
+-		
+-		public double Duration
+-		{
+-			get 
+-			{ 
+-				return _audioPlayer.Duration;
+-			}
+-		}
+-		
+-		public double CurrentPosition
+-		{
+-			get 
+-			{ 
+-				return _audioPlayer.CurrentTime;
+-			}
+-		}
+-			
+-		public bool Looping
+-		{
+-			get 
+-			{ 
+-				//return this._Looping; 
+-				return (_audioPlayer.NumberOfLoops == -1 );
+-			}
+-			set
+-			{
+-				if ( value )
+-				{
+-					_audioPlayer.NumberOfLoops = -1;
+-				}
+-				else
+-				{
+-					_audioPlayer.NumberOfLoops = 0;
+-				}
+-			}
+-		}
+-		
+-		public float Pan
+-		{
+-			get 
+-			{ 
+-				return _audioPlayer.Pan;
+-			}
+-			set
+-			{
+-				_audioPlayer.Pan = value;
+-			}
+-		}
+-		
+-		public bool Playing
+-		{
+-			get 
+-			{ 
+-				return _audioPlayer.Playing;
+-			}
+-		}
+-		
+-		public float Rate 
+-		{ 
+-			get; 
+-			set; 
+-		}
+-		
+-		public void Pause()
+-		{		
+-			_audioPlayer.Pause();
+-		}
+-		
+-		public void Play()
+-		{
+-            ThreadPool.QueueUserWorkItem(delegate
+-            {
+-                _audioPlayer.Play();
+-            });
+-		}
+-		
+-		public void Resume()
+-		{		
+-			Play();
+-		}
+-		
+-		public void Stop()
+-		{			
+-			_audioPlayer.Stop();
+-		}
+-		
+-		public float Volume
+-		{
+-			get 
+-			{ 
+-				return _audioPlayer.Volume;
+-			}
+-			set
+-			{
+-				_audioPlayer.Volume = value;
+-			}
+-		}
+-		
+-		public static Sound CreateAndPlay(string url, float volume, bool looping)
+-		{
+-			Sound sound = new Sound(url, volume, looping);
+-			
+-			sound.Play();
+-			
+-			return sound;
+-		}
+-	}
+-}
+diff --git a/MonoGame.Framework/iOS/iOSGamePlatform.cs b/MonoGame.Framework/iOS/iOSGamePlatform.cs
+index 5483d51..7aa12a5 100644
+--- a/MonoGame.Framework/iOS/iOSGamePlatform.cs
++++ b/MonoGame.Framework/iOS/iOSGamePlatform.cs
+@@ -76,6 +76,7 @@ 1. Definitions
+ using MonoTouch.Foundation;
+ using MonoTouch.OpenGLES;
+ using MonoTouch.UIKit;
++using Microsoft.Xna.Framework.Audio;
+ 
+ namespace Microsoft.Xna.Framework
+ {
+@@ -91,11 +92,15 @@ class iOSGamePlatform : GamePlatform
+         private UIWindow _mainWindow;
+         private NSObject _rotationObserver;
+         private List<NSObject> _applicationObservers;
++	private OpenALSoundController soundControllerInstance = null;
+ 
+         public iOSGamePlatform(Game game) :
+             base(game)
+         {
+             game.Services.AddService(typeof(iOSGamePlatform), this);
++		// Setup our OpenALSoundController to handle our SoundBuffer pools
++		soundControllerInstance = OpenALSoundController.GetInstance;
++			
+             Directory.SetCurrentDirectory(NSBundle.MainBundle.ResourcePath);
+ 
+             _applicationObservers = new List<NSObject>();
+@@ -199,6 +204,8 @@ private void GameWindow_Unload(object sender, EventArgs e)
+ 
+         public override bool BeforeDraw(GameTime gameTime)
+         {
++		// Update our OpenAL sound buffer pools
++		soundControllerInstance.Update();
+             if (IsPlayingVideo)
+                 return false;
+             return true;
+-- 
+1.7.5.4
+
+
+From 79e329538ad1b8e8fa39533f4b7e3338b183770d Mon Sep 17 00:00:00 2001
+From: Kenneth Pouncey <kjpou@pt.lu>
+Date: Tue, 3 Jan 2012 16:22:53 +0100
+Subject: [PATCH 3/9] The class definitions werereversed in that
+ BoundingFrustrom class was in BoundSphere class file
+ and vice-versa
+
+---
+ MonoGame.Framework/BoundingFrustum.cs |  878 +++++++++++++++++++--------------
+ MonoGame.Framework/BoundingSphere.cs  |  525 +++++++-------------
+ 2 files changed, 702 insertions(+), 701 deletions(-)
+
+diff --git a/MonoGame.Framework/BoundingFrustum.cs b/MonoGame.Framework/BoundingFrustum.cs
+index 0723988..8cadcca 100644
+--- a/MonoGame.Framework/BoundingFrustum.cs
++++ b/MonoGame.Framework/BoundingFrustum.cs
+@@ -1,363 +1,515 @@
+-﻿#region License
+-/*
+-MIT License
+-Copyright ¬© 2006 The Mono.Xna Team
+-
+-All rights reserved.
+-
+-Authors:
+-Olivier Dufour (Duff)
+-
+-Permission is hereby granted, free of charge, to any person obtaining a copy
+-of this software and associated documentation files (the "Software"), to deal
+-in the Software without restriction, including without limitation the rights
+-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-copies of the Software, and to permit persons to whom the Software is
+-furnished to do so, subject to the following conditions:
+-
+-The above copyright notice and this permission notice shall be included in all
+-copies or substantial portions of the Software.
+-
+-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-SOFTWARE.
+-*/
+-#endregion License
+-
+-using System;
+-using System.Collections.Generic;
+-using System.Globalization;
+-using System.ComponentModel;
+-
+-namespace Microsoft.Xna.Framework
+-{
+-    public struct BoundingSphere : IEquatable<BoundingSphere>
+-    {
+-        #region Public Fields
+-
+-        public Vector3 Center;
+-        public float Radius;
+-
+-        #endregion Public Fields
+-
+-
+-        #region Constructors
+-
+-        public BoundingSphere(Vector3 center, float radius)
+-        {
+-            this.Center = center;
+-            this.Radius = radius;
+-        }
+-
+-        #endregion Constructors
+-
+-
+-        #region Public Methods
+-
+-        public BoundingSphere Transform(Matrix matrix)
+-        {
+-            BoundingSphere sphere = new BoundingSphere();
+-            sphere.Center = Vector3.Transform(this.Center, matrix);
+-            sphere.Radius = this.Radius * ((float)Math.Sqrt((double)Math.Max(((matrix.M11 * matrix.M11) + (matrix.M12 * matrix.M12)) + (matrix.M13 * matrix.M13), Math.Max(((matrix.M21 * matrix.M21) + (matrix.M22 * matrix.M22)) + (matrix.M23 * matrix.M23), ((matrix.M31 * matrix.M31) + (matrix.M32 * matrix.M32)) + (matrix.M33 * matrix.M33)))));
+-            return sphere;
+-        }
+-
+-        public void Transform(ref Matrix matrix, out BoundingSphere result)
+-        {
+-            result.Center = Vector3.Transform(this.Center, matrix);
+-            result.Radius = this.Radius * ((float)Math.Sqrt((double)Math.Max(((matrix.M11 * matrix.M11) + (matrix.M12 * matrix.M12)) + (matrix.M13 * matrix.M13), Math.Max(((matrix.M21 * matrix.M21) + (matrix.M22 * matrix.M22)) + (matrix.M23 * matrix.M23), ((matrix.M31 * matrix.M31) + (matrix.M32 * matrix.M32)) + (matrix.M33 * matrix.M33)))));
+-        }
+-
+-        public ContainmentType Contains(BoundingBox box)
+-        {
+-            //check if all corner is in sphere
+-            bool inside = true;
+-            foreach (Vector3 corner in box.GetCorners())
+-            {
+-                if (this.Contains(corner) == ContainmentType.Disjoint)
+-                {
+-                    inside = false;
+-                    break;
+-                }
+-            }
+-
+-            if (inside)
+-                return ContainmentType.Contains;
+-
+-            //check if the distance from sphere center to cube face < radius
+-            double dmin = 0;
+-
+-            if (Center.X < box.Min.X)
+-				dmin += (Center.X - box.Min.X) * (Center.X - box.Min.X);
+-
+-			else if (Center.X > box.Max.X)
+-					dmin += (Center.X - box.Max.X) * (Center.X - box.Max.X);
+-
+-			if (Center.Y < box.Min.Y)
+-				dmin += (Center.Y - box.Min.Y) * (Center.Y - box.Min.Y);
+-
+-			else if (Center.Y > box.Max.Y)
+-				dmin += (Center.Y - box.Max.Y) * (Center.Y - box.Max.Y);
+-
+-			if (Center.Z < box.Min.Z)
+-				dmin += (Center.Z - box.Min.Z) * (Center.Z - box.Min.Z);
+-
+-			else if (Center.Z > box.Max.Z)
+-				dmin += (Center.Z - box.Max.Z) * (Center.Z - box.Max.Z);
+-
+-			if (dmin <= Radius * Radius) 
+-				return ContainmentType.Intersects;
+-            
+-            //else disjoint
+-            return ContainmentType.Disjoint;
+-
+-        }
+-
+-        public void Contains(ref BoundingBox box, out ContainmentType result)
+-        {
+-            result = this.Contains(box);
+-        }
+-
+-        public ContainmentType Contains(BoundingFrustum frustum)
+-        {
+-            //check if all corner is in sphere
+-            bool inside = true;
+-
+-            Vector3[] corners = frustum.GetCorners();
+-            foreach (Vector3 corner in corners)
+-            {
+-                if (this.Contains(corner) == ContainmentType.Disjoint)
+-                {
+-                    inside = false;
+-                    break;
+-                }
+-            }
+-            if (inside)
+-                return ContainmentType.Contains;
+-
+-            //check if the distance from sphere center to frustrum face < radius
+-            double dmin = 0;
+-            //TODO : calcul dmin
+-
+-            if (dmin <= Radius * Radius)
+-                return ContainmentType.Intersects;
+-
+-            //else disjoint
+-            return ContainmentType.Disjoint;
+-        }
+-
+-        public ContainmentType Contains(BoundingSphere sphere)
+-        {
+-            float val = Vector3.Distance(sphere.Center, Center);
+-
+-            if (val > sphere.Radius + Radius)
+-                return ContainmentType.Disjoint;
+-
+-            else if (val <= Radius - sphere.Radius)
+-                return ContainmentType.Contains;
+-
+-            else
+-                return ContainmentType.Intersects;
+-        }
+-
+-        public void Contains(ref BoundingSphere sphere, out ContainmentType result)
+-        {
+-            result = Contains(sphere);
+-        }
+-
+-        public ContainmentType Contains(Vector3 point)
+-        {
+-            float distance = Vector3.Distance(point, Center);
+-
+-            if (distance > this.Radius)
+-                return ContainmentType.Disjoint;
+-
+-            else if (distance < this.Radius)
+-                return ContainmentType.Contains;
+-
+-            return ContainmentType.Intersects;
+-        }
+-
+-        public void Contains(ref Vector3 point, out ContainmentType result)
+-        {
+-            result = Contains(point);
+-        }
+-
+-        public static BoundingSphere CreateFromBoundingBox(BoundingBox box)
+-        {
+-            // Find the center of the box.
+-            Vector3 center = new Vector3((box.Min.X + box.Max.X) / 2.0f,
+-                                         (box.Min.Y + box.Max.Y) / 2.0f,
+-                                         (box.Min.Z + box.Max.Z) / 2.0f);
+-
+-            // Find the distance between the center and one of the corners of the box.
+-            float radius = Vector3.Distance(center, box.Max);
+-
+-            return new BoundingSphere(center, radius);
+-        }
+-
+-        public static void CreateFromBoundingBox(ref BoundingBox box, out BoundingSphere result)
+-        {
+-            result = CreateFromBoundingBox(box);
+-        }
+-
+-        public static BoundingSphere CreateFromFrustum(BoundingFrustum frustum)
+-        {
+-            return BoundingSphere.CreateFromPoints(frustum.GetCorners());
+-        }
+-
+-        public static BoundingSphere CreateFromPoints(IEnumerable<Vector3> points)
+-        {
+-            if (points == null)
+-                throw new ArgumentNullException("points");
+-
+-            float radius = 0;
+-            Vector3 center = new Vector3();
+-            // First, we'll find the center of gravity for the point 'cloud'.
+-            int num_points = 0; // The number of points (there MUST be a better way to get this instead of counting the number of points one by one?)
+-            
+-            foreach (Vector3 v in points)
+-            {
+-                center += v;    // If we actually knew the number of points, we'd get better accuracy by adding v / num_points.
+-                ++num_points;
+-            }
+-            
+-            center /= (float)num_points;
+-
+-            // Calculate the radius of the needed sphere (it equals the distance between the center and the point further away).
+-            foreach (Vector3 v in points)
+-            {
+-                float distance = ((Vector3)(v - center)).Length();
+-                
+-                if (distance > radius)
+-                    radius = distance;
+-            }
+-
+-            return new BoundingSphere(center, radius);
+-        }
+-
+-        public static BoundingSphere CreateMerged(BoundingSphere original, BoundingSphere additional)
+-        {
+-            Vector3 ocenterToaCenter = Vector3.Subtract(additional.Center, original.Center);
+-            float distance = ocenterToaCenter.Length();
+-            if (distance <= original.Radius + additional.Radius)//intersect
+-            {
+-                if (distance <= original.Radius - additional.Radius)//original contain additional
+-                    return original;
+-                if (distance <= additional.Radius - original.Radius)//additional contain original
+-                    return additional;
+-            }
+-
+-            //else find center of new sphere and radius
+-            float leftRadius = Math.Max(original.Radius - distance, additional.Radius);
+-            float Rightradius = Math.Max(original.Radius + distance, additional.Radius);
+-            ocenterToaCenter = ocenterToaCenter + (((leftRadius - Rightradius) / (2 * ocenterToaCenter.Length())) * ocenterToaCenter);//oCenterToResultCenter
+-            
+-            BoundingSphere result = new BoundingSphere();
+-            result.Center = original.Center + ocenterToaCenter;
+-            result.Radius = (leftRadius + Rightradius) / 2;
+-            return result;
+-        }
+-
+-        public static void CreateMerged(ref BoundingSphere original, ref BoundingSphere additional, out BoundingSphere result)
+-        {
+-            result = BoundingSphere.CreateMerged(original, additional);
+-        }
+-
+-        public bool Equals(BoundingSphere other)
+-        {
+-            return this.Center == other.Center && this.Radius == other.Radius;
+-        }
+-
+-        public override bool Equals(object obj)
+-        {
+-            if (obj is BoundingSphere)
+-                return this.Equals((BoundingSphere)obj);
+-
+-            return false;
+-        }
+-
+-        public override int GetHashCode()
+-        {
+-            return this.Center.GetHashCode() + this.Radius.GetHashCode();
+-        }
+-
+-        public bool Intersects(BoundingBox box)
+-        {
+-			return box.Intersects(this);
+-        }
+-
+-        public void Intersects(ref BoundingBox box, out bool result)
+-        {
+-			result = Intersects(box);
+-        }
+-
+-        public bool Intersects(BoundingFrustum frustum)
+-        {
+-            if (frustum == null)
+-                throw new NullReferenceException();
+-
+-            throw new NotImplementedException();
+-        }
+-
+-        public bool Intersects(BoundingSphere sphere)
+-        {
+-            float val = Vector3.Distance(sphere.Center, Center);
+-			if (val > sphere.Radius + Radius)
+-				return false;
+-			return true;
+-        }
+-
+-        public void Intersects(ref BoundingSphere sphere, out bool result)
+-        {
+-			result = Intersects(sphere);
+-        }
+-
+-        public PlaneIntersectionType Intersects(Plane plane)
+-        {
+-			float distance = Vector3.Dot(plane.Normal, this.Center) + plane.D;
+-			if (distance > this.Radius)
+-				return PlaneIntersectionType.Front;
+-			if (distance < -this.Radius)
+-				return PlaneIntersectionType.Back;
+-			//else it intersect
+-			return PlaneIntersectionType.Intersecting;
+-        }
+-
+-        public void Intersects(ref Plane plane, out PlaneIntersectionType result)
+-        {
+-			result = Intersects(plane);
+-        }
+-
+-        public Nullable<float> Intersects(Ray ray)
+-        {
+-            return ray.Intersects(this);
+-        }
+-
+-        public void Intersects(ref Ray ray, out Nullable<float> result)
+-        {
+-			result = Intersects(ray);
+-        }
+-
+-        public static bool operator == (BoundingSphere a, BoundingSphere b)
+-        {
+-            return a.Equals(b);
+-        }
+-
+-        public static bool operator != (BoundingSphere a, BoundingSphere b)
+-        {
+-            return !a.Equals(b);
+-        }
+-
+-        public override string ToString()
+-        {
+-            return string.Format(CultureInfo.CurrentCulture, "{{Center:{0} Radius:{1}}}", this.Center.ToString(), this.Radius.ToString());
+-        }
+-
+-        #endregion Public Methods
+-    }
+-}
++﻿
++#region License
++/*
++MIT License
++Copyright © 2006 The Mono.Xna Team
++
++All rights reserved.
++
++Authors:
++Olivier Dufour (Duff)
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
++*/
++#endregion License
++
++using System;
++using System.Collections.Generic;
++using System.ComponentModel;
++using System.Runtime.InteropServices;
++using System.Text;
++
++namespace Microsoft.Xna.Framework
++{
++    public class BoundingFrustum : IEquatable<BoundingFrustum>
++    {
++        #region Private Fields
++
++        private Matrix matrix;
++        private Plane bottom;
++        private Plane far;
++        private Plane left;
++        private Plane right;
++        private Plane near;
++        private Plane top;
++        private Vector3[] corners;
++
++        #endregion Private Fields
++
++        #region Public Fields
++        public const int CornerCount = 8;
++        #endregion
++
++        #region Public Constructors
++
++        public BoundingFrustum(Matrix value)
++        {
++            this.matrix = value;
++            CreatePlanes();
++            CreateCorners();
++        }
++
++        #endregion Public Constructors
++
++
++        #region Public Properties
++
++        public Plane Bottom
++        {
++            get { return this.bottom; }
++        }
++
++        public Plane Far
++        {
++            get { return this.far; }
++        }
++
++        public Plane Left
++        {
++            get { return this.left; }
++        }
++
++        public Matrix Matrix
++        {
++            get { return this.matrix; }
++            set
++            {
++                this.matrix = value;
++                this.CreatePlanes();    // FIXME: The odds are the planes will be used a lot more often than the matrix
++            	this.CreateCorners();   // is updated, so this should help performance. I hope ;)
++			}
++        }
++
++        public Plane Near
++        {
++            get { return this.near; }
++        }
++
++        public Plane Right
++        {
++            get { return this.right; }
++        }
++
++        public Plane Top
++        {
++            get { return this.top; }
++        }
++
++        #endregion Public Properties
++
++
++        #region Public Methods
++
++        public static bool operator ==(BoundingFrustum a, BoundingFrustum b)
++        {
++            if (object.Equals(a, null))
++                return (object.Equals(b, null));
++
++            if (object.Equals(b, null))
++                return (object.Equals(a, null));
++
++            return a.matrix == (b.matrix);
++        }
++
++        public static bool operator !=(BoundingFrustum a, BoundingFrustum b)
++        {
++            return !(a == b);
++        }
++
++        public ContainmentType Contains(BoundingBox box)
++        {
++            ContainmentType result;
++            this.Contains(ref box, out result);
++            return result;
++        }
++
++        public void GetCorners(Vector3[] corners)
++        {
++            throw new NotImplementedException();
++        }
++
++        public void Contains(ref BoundingBox box, out ContainmentType result)
++        {
++            // FIXME: Is this a bug?
++            // If the bounding box is of W * D * H = 0, then return disjoint
++            if (box.Min == box.Max)
++            {
++                result = ContainmentType.Disjoint;
++                return;
++            }
++
++            int i;
++            ContainmentType contained;
++            Vector3[] corners = box.GetCorners();
++
++            // First we assume completely disjoint. So if we find a point that is contained, we break out of this loop
++            for (i = 0; i < corners.Length; i++)
++            {
++                this.Contains(ref corners[i], out contained);
++                if (contained != ContainmentType.Disjoint)
++                    break;
++            }
++
++            if (i == corners.Length) // This means we checked all the corners and they were all disjoint
++            {
++                result = ContainmentType.Disjoint;
++                return;
++            }
++
++            if (i != 0)             // if i is not equal to zero, we can fastpath and say that this box intersects
++            {                       // because we know at least one point is outside and one is inside.
++                result = ContainmentType.Intersects;
++                return;
++            }
++
++            // If we get here, it means the first (and only) point we checked was actually contained in the frustum.
++            // So we assume that all other points will also be contained. If one of the points is disjoint, we can
++            // exit immediately saying that the result is Intersects
++            i++;
++            for (; i < corners.Length; i++)
++            {
++                this.Contains(ref corners[i], out contained);
++                if (contained != ContainmentType.Contains)
++                {
++                    result = ContainmentType.Intersects;
++                    return;
++                }
++            }
++
++            // If we get here, then we know all the points were actually contained, therefore result is Contains
++            result = ContainmentType.Contains;
++            return;
++        }
++
++        // TODO: Implement this
++        public ContainmentType Contains(BoundingFrustum frustum)
++        {
++            if (this == frustum)                // We check to see if the two frustums are equal
++                return ContainmentType.Contains;// If they are, there's no need to go any further.
++
++            throw new NotImplementedException();
++        }
++
++        public ContainmentType Contains(BoundingSphere sphere)
++        {
++            ContainmentType result;
++            this.Contains(ref sphere, out result);
++            return result;
++        }
++
++        public void Contains(ref BoundingSphere sphere, out ContainmentType result)
++        {
++            float val;
++            ContainmentType contained;
++
++            // We first check if the sphere is inside the frustum
++            this.Contains(ref sphere.Center, out contained);
++
++            // The sphere is inside. Now we need to check if it's fully contained or not
++            // So we see if the perpendicular distance to each plane is less than or equal to the sphere's radius.
++            // If the perpendicular distance is less, just return Intersects.
++            if (contained == ContainmentType.Contains)
++            {
++                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.bottom);
++                if (val < sphere.Radius)
++                {
++                    result = ContainmentType.Intersects;
++                    return;
++                }
++
++                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.far);
++                if (val < sphere.Radius)
++                {
++                    result = ContainmentType.Intersects;
++                    return;
++                }
++
++                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.left);
++                if (val < sphere.Radius)
++                {
++                    result = ContainmentType.Intersects;
++                    return;
++                }
++
++                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.near);
++                if (val < sphere.Radius)
++                {
++                    result = ContainmentType.Intersects;
++                    return;
++                }
++
++                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.right);
++                if (val < sphere.Radius)
++                {
++                    result = ContainmentType.Intersects;
++                    return;
++                }
++
++                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.top);
++                if (val < sphere.Radius)
++                {
++                    result = ContainmentType.Intersects;
++                    return;
++                }
++
++                // If we get here, the sphere is fully contained
++                result = ContainmentType.Contains;
++                return;
++            }
++            //duff idea : test if all corner is in same side of a plane if yes and outside it is disjoint else intersect
++            // issue is that we can have some times when really close aabb 
++
++
++
++            // If we're here, the the sphere's centre was outside of the frustum. This makes things hard :(
++            // We can't use perpendicular distance anymore. I'm not sure how to code this.
++            throw new NotImplementedException();
++        }
++
++        public ContainmentType Contains(Vector3 point)
++        {
++            ContainmentType result;
++            this.Contains(ref point, out result);
++            return result;
++        }
++
++        public void Contains(ref Vector3 point, out ContainmentType result)
++        {
++            float val;
++            // If a point is on the POSITIVE side of the plane, then the point is not contained within the frustum
++
++            // Check the top
++            val = PlaneHelper.ClassifyPoint(ref point, ref this.top);
++            if (val > 0)
++            {
++                result = ContainmentType.Disjoint;
++                return;
++            }
++
++            // Check the bottom
++            val = PlaneHelper.ClassifyPoint(ref point, ref this.bottom);
++            if (val > 0)
++            {
++                result = ContainmentType.Disjoint;
++                return;
++            }
++
++            // Check the left
++            val = PlaneHelper.ClassifyPoint(ref point, ref this.left);
++            if (val > 0)
++            {
++                result = ContainmentType.Disjoint;
++                return;
++            }
++
++            // Check the right
++            val = PlaneHelper.ClassifyPoint(ref point, ref this.right);
++            if (val > 0)
++            {
++                result = ContainmentType.Disjoint;
++                return;
++            }
++
++            // Check the near
++            val = PlaneHelper.ClassifyPoint(ref point, ref this.near);
++            if (val > 0)
++            {
++                result = ContainmentType.Disjoint;
++                return;
++            }
++
++            // Check the far
++            val = PlaneHelper.ClassifyPoint(ref point, ref this.far);
++            if (val > 0)
++            {
++                result = ContainmentType.Disjoint;
++                return;
++            }
++
++            // If we get here, it means that the point was on the correct side of each plane to be
++            // contained. Therefore this point is contained
++            result = ContainmentType.Contains;
++        }
++
++        public bool Equals(BoundingFrustum other)
++        {
++            return (this == other);
++        }
++
++        public override bool Equals(object obj)
++        {
++            BoundingFrustum f = obj as BoundingFrustum;
++            return (object.Equals(f, null)) ? false : (this == f);
++        }
++
++        public Vector3[] GetCorners()
++        {
++            return corners;
++        }
++
++        public override int GetHashCode()
++        {
++            return this.matrix.GetHashCode();
++        }
++
++        public bool Intersects(BoundingBox box)
++        {
++            throw new NotImplementedException();
++        }
++
++        public void Intersects(ref BoundingBox box, out bool result)
++        {
++            throw new NotImplementedException();
++        }
++
++        public bool Intersects(BoundingFrustum frustum)
++        {
++            throw new NotImplementedException();
++        }
++
++        public bool Intersects(BoundingSphere sphere)
++        {
++            throw new NotImplementedException();
++        }
++
++        public void Intersects(ref BoundingSphere sphere, out bool result)
++        {
++            throw new NotImplementedException();
++        }
++
++        public PlaneIntersectionType Intersects(Plane plane)
++        {
++            throw new NotImplementedException();
++        }
++
++        public void Intersects(ref Plane plane, out PlaneIntersectionType result)
++        {
++            throw new NotImplementedException();
++        }
++
++        public Nullable<float> Intersects(Ray ray)
++        {
++            throw new NotImplementedException();
++        }
++
++        public void Intersects(ref Ray ray, out Nullable<float> result)
++        {
++            throw new NotImplementedException();
++        }
++
++        public override string ToString()
++        {
++            StringBuilder sb = new StringBuilder(256);
++            sb.Append("{Near:");
++            sb.Append(this.near.ToString());
++            sb.Append(" Far:");
++            sb.Append(this.far.ToString());
++            sb.Append(" Left:");
++            sb.Append(this.left.ToString());
++            sb.Append(" Right:");
++            sb.Append(this.right.ToString());
++            sb.Append(" Top:");
++            sb.Append(this.top.ToString());
++            sb.Append(" Bottom:");
++            sb.Append(this.bottom.ToString());
++            sb.Append("}");
++            return sb.ToString();
++        }
++
++        #endregion Public Methods
++
++
++        #region Private Methods
++
++#warning Move this to the PlaneHelper class
++        private void CreateCorners()
++        {
++            this.corners = new Vector3[8];
++            this.corners[0] = IntersectionPoint(ref this.near, ref this.left, ref this.top);
++            this.corners[1] = IntersectionPoint(ref this.near, ref this.right, ref this.top);
++            this.corners[2] = IntersectionPoint(ref this.near, ref this.right, ref this.bottom);
++            this.corners[3] = IntersectionPoint(ref this.near, ref this.left, ref this.bottom);
++            this.corners[4] = IntersectionPoint(ref this.far, ref this.left, ref this.top);
++            this.corners[5] = IntersectionPoint(ref this.far, ref this.right, ref this.top);
++            this.corners[6] = IntersectionPoint(ref this.far, ref this.right, ref this.bottom);
++            this.corners[7] = IntersectionPoint(ref this.far, ref this.left, ref this.bottom);
++        }
++
++        private void CreatePlanes()
++        {
++            // Pre-calculate the different planes needed
++            this.left = new Plane(-this.matrix.M14 - this.matrix.M11, -this.matrix.M24 - this.matrix.M21,
++                                  -this.matrix.M34 - this.matrix.M31, -this.matrix.M44 - this.matrix.M41);
++
++            this.right = new Plane(this.matrix.M11 - this.matrix.M14, this.matrix.M21 - this.matrix.M24,
++                                   this.matrix.M31 - this.matrix.M34, this.matrix.M41 - this.matrix.M44);
++
++            this.top = new Plane(this.matrix.M12 - this.matrix.M14, this.matrix.M22 - this.matrix.M24,
++                                 this.matrix.M32 - this.matrix.M34, this.matrix.M42 - this.matrix.M44);
++
++            this.bottom = new Plane(-this.matrix.M14 - this.matrix.M12, -this.matrix.M24 - this.matrix.M22,
++                                    -this.matrix.M34 - this.matrix.M32, -this.matrix.M44 - this.matrix.M42);
++
++            this.near = new Plane(-this.matrix.M13, -this.matrix.M23, -this.matrix.M33, -this.matrix.M43);
++
++
++            this.far = new Plane(this.matrix.M13 - this.matrix.M14, this.matrix.M23 - this.matrix.M24,
++                                 this.matrix.M33 - this.matrix.M34, this.matrix.M43 - this.matrix.M44);
++
++            this.NormalizePlane(ref this.left);
++            this.NormalizePlane(ref this.right);
++            this.NormalizePlane(ref this.top);
++            this.NormalizePlane(ref this.bottom);
++            this.NormalizePlane(ref this.near);
++            this.NormalizePlane(ref this.far);
++        }
++
++        private static Vector3 IntersectionPoint(ref Plane a, ref Plane b, ref Plane c)
++        {
++            // Formula used
++            //                d1 ( N2 * N3 ) + d2 ( N3 * N1 ) + d3 ( N1 * N2 )
++            //P = 	-------------------------------------------------------------------------
++            //                             N1 . ( N2 * N3 )
++            //
++            // Note: N refers to the normal, d refers to the displacement. '.' means dot product. '*' means cross product
++
++            Vector3 v1, v2, v3;
++            float f = -Vector3.Dot(a.Normal, Vector3.Cross(b.Normal, c.Normal));
++
++            v1 = (a.D * (Vector3.Cross(b.Normal, c.Normal)));
++            v2 = (b.D * (Vector3.Cross(c.Normal, a.Normal)));
++            v3 = (c.D * (Vector3.Cross(a.Normal, b.Normal)));
++
++            Vector3 vec = new Vector3(v1.X + v2.X + v3.X, v1.Y + v2.Y + v3.Y, v1.Z + v2.Z + v3.Z);
++            return vec / f;
++        }
++        
++        private void NormalizePlane(ref Plane p)
++        {
++            float factor = 1f / p.Normal.Length();
++            p.Normal.X *= factor;
++            p.Normal.Y *= factor;
++            p.Normal.Z *= factor;
++            p.D *= factor;
++        }
++
++        #endregion
++    }
++}
++
+diff --git a/MonoGame.Framework/BoundingSphere.cs b/MonoGame.Framework/BoundingSphere.cs
+index 9634a2c..06bb601 100644
+--- a/MonoGame.Framework/BoundingSphere.cs
++++ b/MonoGame.Framework/BoundingSphere.cs
+@@ -1,7 +1,7 @@
+ ﻿#region License
+ /*
+ MIT License
+-Copyright © 2006 The Mono.Xna Team
++Copyright ¬© 2006 The Mono.Xna Team
+ 
+ All rights reserved.
+ 
+@@ -30,485 +30,334 @@ Olivier Dufour (Duff)
+ 
+ using System;
+ using System.Collections.Generic;
++using System.Globalization;
+ using System.ComponentModel;
+-using System.Runtime.InteropServices;
+-using System.Text;
+ 
+ namespace Microsoft.Xna.Framework
+ {
+-    public class BoundingFrustum : IEquatable<BoundingFrustum>
++    public struct BoundingSphere : IEquatable<BoundingSphere>
+     {
+-        #region Private Fields
++        #region Public Fields
+ 
+-        private Matrix matrix;
+-        private Plane bottom;
+-        private Plane far;
+-        private Plane left;
+-        private Plane right;
+-        private Plane near;
+-        private Plane top;
+-        private Vector3[] corners;
++        public Vector3 Center;
++        public float Radius;
+ 
+-        #endregion Private Fields
++        #endregion Public Fields
+ 
+-        #region Public Fields
+-        public const int CornerCount = 8;
+-        #endregion
+ 
+-        #region Public Constructors
++        #region Constructors
+ 
+-        public BoundingFrustum(Matrix value)
++        public BoundingSphere(Vector3 center, float radius)
+         {
+-            this.matrix = value;
+-            CreatePlanes();
+-            CreateCorners();
++            this.Center = center;
++            this.Radius = radius;
+         }
+ 
+-        #endregion Public Constructors
++        #endregion Constructors
+ 
+ 
+-        #region Public Properties
+-
+-        public Plane Bottom
+-        {
+-            get { return this.bottom; }
+-        }
++        #region Public Methods
+ 
+-        public Plane Far
++        public BoundingSphere Transform(Matrix matrix)
+         {
+-            get { return this.far; }
++            BoundingSphere sphere = new BoundingSphere();
++            sphere.Center = Vector3.Transform(this.Center, matrix);
++            sphere.Radius = this.Radius * ((float)Math.Sqrt((double)Math.Max(((matrix.M11 * matrix.M11) + (matrix.M12 * matrix.M12)) + (matrix.M13 * matrix.M13), Math.Max(((matrix.M21 * matrix.M21) + (matrix.M22 * matrix.M22)) + (matrix.M23 * matrix.M23), ((matrix.M31 * matrix.M31) + (matrix.M32 * matrix.M32)) + (matrix.M33 * matrix.M33)))));
++            return sphere;
+         }
+ 
+-        public Plane Left
++        public void Transform(ref Matrix matrix, out BoundingSphere result)
+         {
+-            get { return this.left; }
++            result.Center = Vector3.Transform(this.Center, matrix);
++            result.Radius = this.Radius * ((float)Math.Sqrt((double)Math.Max(((matrix.M11 * matrix.M11) + (matrix.M12 * matrix.M12)) + (matrix.M13 * matrix.M13), Math.Max(((matrix.M21 * matrix.M21) + (matrix.M22 * matrix.M22)) + (matrix.M23 * matrix.M23), ((matrix.M31 * matrix.M31) + (matrix.M32 * matrix.M32)) + (matrix.M33 * matrix.M33)))));
+         }
+ 
+-        public Matrix Matrix
++        public ContainmentType Contains(BoundingBox box)
+         {
+-            get { return this.matrix; }
+-            set
++            //check if all corner is in sphere
++            bool inside = true;
++            foreach (Vector3 corner in box.GetCorners())
+             {
+-                this.matrix = value;
+-                this.CreatePlanes();    // FIXME: The odds are the planes will be used a lot more often than the matrix
+-            	this.CreateCorners();   // is updated, so this should help performance. I hope ;)
+-			}
+-        }
++                if (this.Contains(corner) == ContainmentType.Disjoint)
++                {
++                    inside = false;
++                    break;
++                }
++            }
+ 
+-        public Plane Near
+-        {
+-            get { return this.near; }
+-        }
++            if (inside)
++                return ContainmentType.Contains;
+ 
+-        public Plane Right
+-        {
+-            get { return this.right; }
+-        }
++            //check if the distance from sphere center to cube face < radius
++            double dmin = 0;
+ 
+-        public Plane Top
+-        {
+-            get { return this.top; }
+-        }
++            if (Center.X < box.Min.X)
++				dmin += (Center.X - box.Min.X) * (Center.X - box.Min.X);
+ 
+-        #endregion Public Properties
++			else if (Center.X > box.Max.X)
++					dmin += (Center.X - box.Max.X) * (Center.X - box.Max.X);
+ 
++			if (Center.Y < box.Min.Y)
++				dmin += (Center.Y - box.Min.Y) * (Center.Y - box.Min.Y);
+ 
+-        #region Public Methods
++			else if (Center.Y > box.Max.Y)
++				dmin += (Center.Y - box.Max.Y) * (Center.Y - box.Max.Y);
+ 
+-        public static bool operator ==(BoundingFrustum a, BoundingFrustum b)
+-        {
+-            if (object.Equals(a, null))
+-                return (object.Equals(b, null));
++			if (Center.Z < box.Min.Z)
++				dmin += (Center.Z - box.Min.Z) * (Center.Z - box.Min.Z);
+ 
+-            if (object.Equals(b, null))
+-                return (object.Equals(a, null));
++			else if (Center.Z > box.Max.Z)
++				dmin += (Center.Z - box.Max.Z) * (Center.Z - box.Max.Z);
+ 
+-            return a.matrix == (b.matrix);
+-        }
++			if (dmin <= Radius * Radius) 
++				return ContainmentType.Intersects;
++            
++            //else disjoint
++            return ContainmentType.Disjoint;
+ 
+-        public static bool operator !=(BoundingFrustum a, BoundingFrustum b)
+-        {
+-            return !(a == b);
+         }
+ 
+-        public ContainmentType Contains(BoundingBox box)
++        public void Contains(ref BoundingBox box, out ContainmentType result)
+         {
+-            ContainmentType result;
+-            this.Contains(ref box, out result);
+-            return result;
++            result = this.Contains(box);
+         }
+ 
+-        public void GetCorners(Vector3[] corners)
++        public ContainmentType Contains(BoundingFrustum frustum)
+         {
+-            throw new NotImplementedException();
+-        }
++            //check if all corner is in sphere
++            bool inside = true;
+ 
+-        public void Contains(ref BoundingBox box, out ContainmentType result)
+-        {
+-            // FIXME: Is this a bug?
+-            // If the bounding box is of W * D * H = 0, then return disjoint
+-            if (box.Min == box.Max)
++            Vector3[] corners = frustum.GetCorners();
++            foreach (Vector3 corner in corners)
+             {
+-                result = ContainmentType.Disjoint;
+-                return;
+-            }
+-
+-            int i;
+-            ContainmentType contained;
+-            Vector3[] corners = box.GetCorners();
+-
+-            // First we assume completely disjoint. So if we find a point that is contained, we break out of this loop
+-            for (i = 0; i < corners.Length; i++)
+-            {
+-                this.Contains(ref corners[i], out contained);
+-                if (contained != ContainmentType.Disjoint)
+-                    break;
+-            }
+-
+-            if (i == corners.Length) // This means we checked all the corners and they were all disjoint
+-            {
+-                result = ContainmentType.Disjoint;
+-                return;
+-            }
+-
+-            if (i != 0)             // if i is not equal to zero, we can fastpath and say that this box intersects
+-            {                       // because we know at least one point is outside and one is inside.
+-                result = ContainmentType.Intersects;
+-                return;
+-            }
+-
+-            // If we get here, it means the first (and only) point we checked was actually contained in the frustum.
+-            // So we assume that all other points will also be contained. If one of the points is disjoint, we can
+-            // exit immediately saying that the result is Intersects
+-            i++;
+-            for (; i < corners.Length; i++)
+-            {
+-                this.Contains(ref corners[i], out contained);
+-                if (contained != ContainmentType.Contains)
++                if (this.Contains(corner) == ContainmentType.Disjoint)
+                 {
+-                    result = ContainmentType.Intersects;
+-                    return;
++                    inside = false;
++                    break;
+                 }
+             }
++            if (inside)
++                return ContainmentType.Contains;
+ 
+-            // If we get here, then we know all the points were actually contained, therefore result is Contains
+-            result = ContainmentType.Contains;
+-            return;
+-        }
++            //check if the distance from sphere center to frustrum face < radius
++            double dmin = 0;
++            //TODO : calcul dmin
+ 
+-        // TODO: Implement this
+-        public ContainmentType Contains(BoundingFrustum frustum)
+-        {
+-            if (this == frustum)                // We check to see if the two frustums are equal
+-                return ContainmentType.Contains;// If they are, there's no need to go any further.
++            if (dmin <= Radius * Radius)
++                return ContainmentType.Intersects;
+ 
+-            throw new NotImplementedException();
++            //else disjoint
++            return ContainmentType.Disjoint;
+         }
+ 
+         public ContainmentType Contains(BoundingSphere sphere)
+         {
+-            ContainmentType result;
+-            this.Contains(ref sphere, out result);
+-            return result;
+-        }
++            float val = Vector3.Distance(sphere.Center, Center);
+ 
+-        public void Contains(ref BoundingSphere sphere, out ContainmentType result)
+-        {
+-            float val;
+-            ContainmentType contained;
++            if (val > sphere.Radius + Radius)
++                return ContainmentType.Disjoint;
+ 
+-            // We first check if the sphere is inside the frustum
+-            this.Contains(ref sphere.Center, out contained);
++            else if (val <= Radius - sphere.Radius)
++                return ContainmentType.Contains;
+ 
+-            // The sphere is inside. Now we need to check if it's fully contained or not
+-            // So we see if the perpendicular distance to each plane is less than or equal to the sphere's radius.
+-            // If the perpendicular distance is less, just return Intersects.
+-            if (contained == ContainmentType.Contains)
+-            {
+-                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.bottom);
+-                if (val < sphere.Radius)
+-                {
+-                    result = ContainmentType.Intersects;
+-                    return;
+-                }
++            else
++                return ContainmentType.Intersects;
++        }
+ 
+-                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.far);
+-                if (val < sphere.Radius)
+-                {
+-                    result = ContainmentType.Intersects;
+-                    return;
+-                }
++        public void Contains(ref BoundingSphere sphere, out ContainmentType result)
++        {
++            result = Contains(sphere);
++        }
+ 
+-                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.left);
+-                if (val < sphere.Radius)
+-                {
+-                    result = ContainmentType.Intersects;
+-                    return;
+-                }
++        public ContainmentType Contains(Vector3 point)
++        {
++            float distance = Vector3.Distance(point, Center);
+ 
+-                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.near);
+-                if (val < sphere.Radius)
+-                {
+-                    result = ContainmentType.Intersects;
+-                    return;
+-                }
++            if (distance > this.Radius)
++                return ContainmentType.Disjoint;
+ 
+-                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.right);
+-                if (val < sphere.Radius)
+-                {
+-                    result = ContainmentType.Intersects;
+-                    return;
+-                }
++            else if (distance < this.Radius)
++                return ContainmentType.Contains;
+ 
+-                val = PlaneHelper.PerpendicularDistance(ref sphere.Center, ref this.top);
+-                if (val < sphere.Radius)
+-                {
+-                    result = ContainmentType.Intersects;
+-                    return;
+-                }
++            return ContainmentType.Intersects;
++        }
+ 
+-                // If we get here, the sphere is fully contained
+-                result = ContainmentType.Contains;
+-                return;
+-            }
+-            //duff idea : test if all corner is in same side of a plane if yes and outside it is disjoint else intersect
+-            // issue is that we can have some times when really close aabb 
++        public void Contains(ref Vector3 point, out ContainmentType result)
++        {
++            result = Contains(point);
++        }
+ 
++        public static BoundingSphere CreateFromBoundingBox(BoundingBox box)
++        {
++            // Find the center of the box.
++            Vector3 center = new Vector3((box.Min.X + box.Max.X) / 2.0f,
++                                         (box.Min.Y + box.Max.Y) / 2.0f,
++                                         (box.Min.Z + box.Max.Z) / 2.0f);
+ 
++            // Find the distance between the center and one of the corners of the box.
++            float radius = Vector3.Distance(center, box.Max);
+ 
+-            // If we're here, the the sphere's centre was outside of the frustum. This makes things hard :(
+-            // We can't use perpendicular distance anymore. I'm not sure how to code this.
+-            throw new NotImplementedException();
++            return new BoundingSphere(center, radius);
+         }
+ 
+-        public ContainmentType Contains(Vector3 point)
++        public static void CreateFromBoundingBox(ref BoundingBox box, out BoundingSphere result)
+         {
+-            ContainmentType result;
+-            this.Contains(ref point, out result);
+-            return result;
++            result = CreateFromBoundingBox(box);
+         }
+ 
+-        public void Contains(ref Vector3 point, out ContainmentType result)
++        public static BoundingSphere CreateFromFrustum(BoundingFrustum frustum)
+         {
+-            float val;
+-            // If a point is on the POSITIVE side of the plane, then the point is not contained within the frustum
+-
+-            // Check the top
+-            val = PlaneHelper.ClassifyPoint(ref point, ref this.top);
+-            if (val > 0)
+-            {
+-                result = ContainmentType.Disjoint;
+-                return;
+-            }
++            return BoundingSphere.CreateFromPoints(frustum.GetCorners());
++        }
+ 
+-            // Check the bottom
+-            val = PlaneHelper.ClassifyPoint(ref point, ref this.bottom);
+-            if (val > 0)
+-            {
+-                result = ContainmentType.Disjoint;
+-                return;
+-            }
++        public static BoundingSphere CreateFromPoints(IEnumerable<Vector3> points)
++        {
++            if (points == null)
++                throw new ArgumentNullException("points");
+ 
+-            // Check the left
+-            val = PlaneHelper.ClassifyPoint(ref point, ref this.left);
+-            if (val > 0)
++            float radius = 0;
++            Vector3 center = new Vector3();
++            // First, we'll find the center of gravity for the point 'cloud'.
++            int num_points = 0; // The number of points (there MUST be a better way to get this instead of counting the number of points one by one?)
++            
++            foreach (Vector3 v in points)
+             {
+-                result = ContainmentType.Disjoint;
+-                return;
++                center += v;    // If we actually knew the number of points, we'd get better accuracy by adding v / num_points.
++                ++num_points;
+             }
++            
++            center /= (float)num_points;
+ 
+-            // Check the right
+-            val = PlaneHelper.ClassifyPoint(ref point, ref this.right);
+-            if (val > 0)
++            // Calculate the radius of the needed sphere (it equals the distance between the center and the point further away).
++            foreach (Vector3 v in points)
+             {
+-                result = ContainmentType.Disjoint;
+-                return;
++                float distance = ((Vector3)(v - center)).Length();
++                
++                if (distance > radius)
++                    radius = distance;
+             }
+ 
+-            // Check the near
+-            val = PlaneHelper.ClassifyPoint(ref point, ref this.near);
+-            if (val > 0)
+-            {
+-                result = ContainmentType.Disjoint;
+-                return;
+-            }
++            return new BoundingSphere(center, radius);
++        }
+ 
+-            // Check the far
+-            val = PlaneHelper.ClassifyPoint(ref point, ref this.far);
+-            if (val > 0)
++        public static BoundingSphere CreateMerged(BoundingSphere original, BoundingSphere additional)
++        {
++            Vector3 ocenterToaCenter = Vector3.Subtract(additional.Center, original.Center);
++            float distance = ocenterToaCenter.Length();
++            if (distance <= original.Radius + additional.Radius)//intersect
+             {
+-                result = ContainmentType.Disjoint;
+-                return;
++                if (distance <= original.Radius - additional.Radius)//original contain additional
++                    return original;
++                if (distance <= additional.Radius - original.Radius)//additional contain original
++                    return additional;
+             }
+ 
+-            // If we get here, it means that the point was on the correct side of each plane to be
+-            // contained. Therefore this point is contained
+-            result = ContainmentType.Contains;
++            //else find center of new sphere and radius
++            float leftRadius = Math.Max(original.Radius - distance, additional.Radius);
++            float Rightradius = Math.Max(original.Radius + distance, additional.Radius);
++            ocenterToaCenter = ocenterToaCenter + (((leftRadius - Rightradius) / (2 * ocenterToaCenter.Length())) * ocenterToaCenter);//oCenterToResultCenter
++            
++            BoundingSphere result = new BoundingSphere();
++            result.Center = original.Center + ocenterToaCenter;
++            result.Radius = (leftRadius + Rightradius) / 2;
++            return result;
+         }
+ 
+-        public bool Equals(BoundingFrustum other)
++        public static void CreateMerged(ref BoundingSphere original, ref BoundingSphere additional, out BoundingSphere result)
+         {
+-            return (this == other);
++            result = BoundingSphere.CreateMerged(original, additional);
+         }
+ 
+-        public override bool Equals(object obj)
++        public bool Equals(BoundingSphere other)
+         {
+-            BoundingFrustum f = obj as BoundingFrustum;
+-            return (object.Equals(f, null)) ? false : (this == f);
++            return this.Center == other.Center && this.Radius == other.Radius;
+         }
+ 
+-        public Vector3[] GetCorners()
++        public override bool Equals(object obj)
+         {
+-            return corners;
++            if (obj is BoundingSphere)
++                return this.Equals((BoundingSphere)obj);
++
++            return false;
+         }
+ 
+         public override int GetHashCode()
+         {
+-            return this.matrix.GetHashCode();
++            return this.Center.GetHashCode() + this.Radius.GetHashCode();
+         }
+ 
+         public bool Intersects(BoundingBox box)
+         {
+-            throw new NotImplementedException();
++			return box.Intersects(this);
+         }
+ 
+         public void Intersects(ref BoundingBox box, out bool result)
+         {
+-            throw new NotImplementedException();
++			result = Intersects(box);
+         }
+ 
+         public bool Intersects(BoundingFrustum frustum)
+         {
++            if (frustum == null)
++                throw new NullReferenceException();
++
+             throw new NotImplementedException();
+         }
+ 
+         public bool Intersects(BoundingSphere sphere)
+         {
+-            throw new NotImplementedException();
++            float val = Vector3.Distance(sphere.Center, Center);
++			if (val > sphere.Radius + Radius)
++				return false;
++			return true;
+         }
+ 
+         public void Intersects(ref BoundingSphere sphere, out bool result)
+         {
+-            throw new NotImplementedException();
++			result = Intersects(sphere);
+         }
+ 
+         public PlaneIntersectionType Intersects(Plane plane)
+         {
+-            throw new NotImplementedException();
++			float distance = Vector3.Dot(plane.Normal, this.Center) + plane.D;
++			if (distance > this.Radius)
++				return PlaneIntersectionType.Front;
++			if (distance < -this.Radius)
++				return PlaneIntersectionType.Back;
++			//else it intersect
++			return PlaneIntersectionType.Intersecting;
+         }
+ 
+         public void Intersects(ref Plane plane, out PlaneIntersectionType result)
+         {
+-            throw new NotImplementedException();
++			result = Intersects(plane);
+         }
+ 
+         public Nullable<float> Intersects(Ray ray)
+         {
+-            throw new NotImplementedException();
++            return ray.Intersects(this);
+         }
+ 
+         public void Intersects(ref Ray ray, out Nullable<float> result)
+         {
+-            throw new NotImplementedException();
++			result = Intersects(ray);
+         }
+ 
+-        public override string ToString()
++        public static bool operator == (BoundingSphere a, BoundingSphere b)
+         {
+-            StringBuilder sb = new StringBuilder(256);
+-            sb.Append("{Near:");
+-            sb.Append(this.near.ToString());
+-            sb.Append(" Far:");
+-            sb.Append(this.far.ToString());
+-            sb.Append(" Left:");
+-            sb.Append(this.left.ToString());
+-            sb.Append(" Right:");
+-            sb.Append(this.right.ToString());
+-            sb.Append(" Top:");
+-            sb.Append(this.top.ToString());
+-            sb.Append(" Bottom:");
+-            sb.Append(this.bottom.ToString());
+-            sb.Append("}");
+-            return sb.ToString();
++            return a.Equals(b);
+         }
+ 
+-        #endregion Public Methods
+-
+-
+-        #region Private Methods
+-
+-#warning Move this to the PlaneHelper class
+-        private void CreateCorners()
++        public static bool operator != (BoundingSphere a, BoundingSphere b)
+         {
+-            this.corners = new Vector3[8];
+-            this.corners[0] = IntersectionPoint(ref this.near, ref this.left, ref this.top);
+-            this.corners[1] = IntersectionPoint(ref this.near, ref this.right, ref this.top);
+-            this.corners[2] = IntersectionPoint(ref this.near, ref this.right, ref this.bottom);
+-            this.corners[3] = IntersectionPoint(ref this.near, ref this.left, ref this.bottom);
+-            this.corners[4] = IntersectionPoint(ref this.far, ref this.left, ref this.top);
+-            this.corners[5] = IntersectionPoint(ref this.far, ref this.right, ref this.top);
+-            this.corners[6] = IntersectionPoint(ref this.far, ref this.right, ref this.bottom);
+-            this.corners[7] = IntersectionPoint(ref this.far, ref this.left, ref this.bottom);
++            return !a.Equals(b);
+         }
+ 
+-        private void CreatePlanes()
+-        {
+-            // Pre-calculate the different planes needed
+-            this.left = new Plane(-this.matrix.M14 - this.matrix.M11, -this.matrix.M24 - this.matrix.M21,
+-                                  -this.matrix.M34 - this.matrix.M31, -this.matrix.M44 - this.matrix.M41);
+-
+-            this.right = new Plane(this.matrix.M11 - this.matrix.M14, this.matrix.M21 - this.matrix.M24,
+-                                   this.matrix.M31 - this.matrix.M34, this.matrix.M41 - this.matrix.M44);
+-
+-            this.top = new Plane(this.matrix.M12 - this.matrix.M14, this.matrix.M22 - this.matrix.M24,
+-                                 this.matrix.M32 - this.matrix.M34, this.matrix.M42 - this.matrix.M44);
+-
+-            this.bottom = new Plane(-this.matrix.M14 - this.matrix.M12, -this.matrix.M24 - this.matrix.M22,
+-                                    -this.matrix.M34 - this.matrix.M32, -this.matrix.M44 - this.matrix.M42);
+-
+-            this.near = new Plane(-this.matrix.M13, -this.matrix.M23, -this.matrix.M33, -this.matrix.M43);
+-
+-
+-            this.far = new Plane(this.matrix.M13 - this.matrix.M14, this.matrix.M23 - this.matrix.M24,
+-                                 this.matrix.M33 - this.matrix.M34, this.matrix.M43 - this.matrix.M44);
+-
+-            this.NormalizePlane(ref this.left);
+-            this.NormalizePlane(ref this.right);
+-            this.NormalizePlane(ref this.top);
+-            this.NormalizePlane(ref this.bottom);
+-            this.NormalizePlane(ref this.near);
+-            this.NormalizePlane(ref this.far);
+-        }
+-
+-        private static Vector3 IntersectionPoint(ref Plane a, ref Plane b, ref Plane c)
+-        {
+-            // Formula used
+-            //                d1 ( N2 * N3 ) + d2 ( N3 * N1 ) + d3 ( N1 * N2 )
+-            //P = 	-------------------------------------------------------------------------
+-            //                             N1 . ( N2 * N3 )
+-            //
+-            // Note: N refers to the normal, d refers to the displacement. '.' means dot product. '*' means cross product
+-
+-            Vector3 v1, v2, v3;
+-            float f = -Vector3.Dot(a.Normal, Vector3.Cross(b.Normal, c.Normal));
+-
+-            v1 = (a.D * (Vector3.Cross(b.Normal, c.Normal)));
+-            v2 = (b.D * (Vector3.Cross(c.Normal, a.Normal)));
+-            v3 = (c.D * (Vector3.Cross(a.Normal, b.Normal)));
+-
+-            Vector3 vec = new Vector3(v1.X + v2.X + v3.X, v1.Y + v2.Y + v3.Y, v1.Z + v2.Z + v3.Z);
+-            return vec / f;
+-        }
+-        
+-        private void NormalizePlane(ref Plane p)
++        public override string ToString()
+         {
+-            float factor = 1f / p.Normal.Length();
+-            p.Normal.X *= factor;
+-            p.Normal.Y *= factor;
+-            p.Normal.Z *= factor;
+-            p.D *= factor;
++            return string.Format(CultureInfo.CurrentCulture, "{{Center:{0} Radius:{1}}}", this.Center.ToString(), this.Radius.ToString());
+         }
+ 
+-        #endregion
++        #endregion Public Methods
+     }
+ }
+-
+-- 
+1.7.5.4
+
+
+From 13e862eedb7fa5721aac26b8e12bce2bc3049813 Mon Sep 17 00:00:00 2001
+From: Kenneth Pouncey <kjpou@pt.lu>
+Date: Tue, 3 Jan 2012 18:12:50 +0100
+Subject: [PATCH 4/9] Fix stencil render targets
+
+---
+ .../MacOS/Graphics/GraphicsDevice.cs               |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/MonoGame.Framework/MacOS/Graphics/GraphicsDevice.cs b/MonoGame.Framework/MacOS/Graphics/GraphicsDevice.cs
+index 12ef0e0..d6ae12b 100644
+--- a/MonoGame.Framework/MacOS/Graphics/GraphicsDevice.cs
++++ b/MonoGame.Framework/MacOS/Graphics/GraphicsDevice.cs
+@@ -397,6 +397,11 @@ public void SetRenderTargets (params RenderTargetBinding[] renderTargets)
+ 
+ 					ClearOptions clearOptions = ClearOptions.Target | ClearOptions.DepthBuffer;
+ 
++					// create framebuffer
++					GL.GenFramebuffers(1, out frameBufferIDs[i]);
++					GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, frameBufferIDs[i]);
++
++					// attach stencil buffer
+ 					switch (target.DepthStencilFormat) {
+ 					case DepthFormat.Depth16:
+ 						GL.RenderbufferStorage(RenderbufferTarget.RenderbufferExt, RenderbufferStorage.DepthComponent16,
+@@ -419,10 +424,6 @@ public void SetRenderTargets (params RenderTargetBinding[] renderTargets)
+ 						break;
+ 					}
+ 					
+-					// create framebuffer
+-					GL.GenFramebuffers(1, out frameBufferIDs[i]);
+-					GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, frameBufferIDs[i]);
+-					
+ 					// attach the texture to FBO color attachment point
+ 					GL.FramebufferTexture2D(FramebufferTarget.FramebufferExt, FramebufferAttachment.ColorAttachment0,
+ 						TextureTarget.Texture2D, target.ID,0);
+-- 
+1.7.5.4
+
+
+From b8ac90f3eb51114d1277aa15105870c25942eff7 Mon Sep 17 00:00:00 2001
+From: Kenneth Pouncey <kjpou@pt.lu>
+Date: Wed, 4 Jan 2012 14:49:31 +0100
+Subject: [PATCH 5/9] Added property value changes to the SoundEffectInstance.
+  Added AudioEmitter and AudioListner code
+ implementations.  Added CreateWorld method to Matrix.
+
+---
+ MonoGame.Framework/Audio/AudioEmitter.cs           |   56 ++++++++++++++----
+ MonoGame.Framework/Audio/AudioListener.cs          |   50 ++++++++++++----
+ MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs   |    4 +-
+ MonoGame.Framework/MacOS/Audio/SoundEffect.cs      |   62 +++++++++++++++++---
+ .../MacOS/Audio/SoundEffectInstance.cs             |   46 ++++++++++++++-
+ MonoGame.Framework/Matrix.cs                       |   23 +++++++
+ 6 files changed, 204 insertions(+), 37 deletions(-)
+
+diff --git a/MonoGame.Framework/Audio/AudioEmitter.cs b/MonoGame.Framework/Audio/AudioEmitter.cs
+index 7f14ccb..4d570f2 100644
+--- a/MonoGame.Framework/Audio/AudioEmitter.cs
++++ b/MonoGame.Framework/Audio/AudioEmitter.cs
+@@ -37,16 +37,48 @@
+ // purpose and non-infringement.
+ // */
+ // #endregion License
+-// 
++// 
+ using System;
+-
+-namespace Microsoft.Xna.Framework.Audio
+-{
+-	public class AudioEmitter
+-	{
+-		public AudioEmitter ()
+-		{
+-		}
+-	}
+-}
+-
++using System.Collections.Generic;
++using System.Text;
++
++namespace Microsoft.Xna.Framework.Audio
++{
++	public class AudioEmitter
++	{
++		public AudioEmitter ()
++		{
++			DopplerScale = 1.0f;
++			Forward = Vector3.Forward;
++			Position = Vector3.Zero;
++			Up = Vector3.Up;
++			Velocity = Vector3.Zero;
++		}
++		
++		public float DopplerScale {
++			get;
++			set;
++		}
++
++		public Vector3 Forward {
++			get;
++			set;
++		}
++
++		public Vector3 Position {
++			get;
++			set;
++		}
++
++		public Vector3 Up {
++			get;
++			set;
++		}
++
++		public Vector3 Velocity {
++			get;
++			set;
++		}
++
++	}
++}
+diff --git a/MonoGame.Framework/Audio/AudioListener.cs b/MonoGame.Framework/Audio/AudioListener.cs
+index 178606a..55eba77 100644
+--- a/MonoGame.Framework/Audio/AudioListener.cs
++++ b/MonoGame.Framework/Audio/AudioListener.cs
+@@ -37,16 +37,42 @@
+ // purpose and non-infringement.
+ // */
+ // #endregion License
+-// 
++// 
+ using System;
+-
+-namespace Microsoft.Xna.Framework.Audio
+-{
+-	public class AudioListener
+-	{
+-		public AudioListener ()
+-		{
+-		}
+-	}
+-}
+-
++using System.Collections.Generic;
++using System.Text;
++
++namespace Microsoft.Xna.Framework.Audio
++{
++	public class AudioListener
++	{
++		public AudioListener ()
++		{
++			Forward = Vector3.Forward;
++			Position = Vector3.Zero;
++			Up = Vector3.Up;
++			Velocity = Vector3.Zero;
++		}
++		
++		public Vector3 Forward {
++			get;
++			set;
++		}
++
++		public Vector3 Position {
++			get;
++			set;
++		}
++
++		public Vector3 Up {
++			get;
++			set;
++		}
++
++		public Vector3 Velocity {
++			get;
++			set;
++		}
++	}
++}
++
+diff --git a/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs b/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs
+index 5137521..3deac5b 100755
+--- a/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs
++++ b/MonoGame.Framework/MacOS/Audio/OALSoundBuffer.cs
+@@ -90,7 +90,7 @@ public int SourceId
+ 			set {
+ 				_sourceId = value;
+ 				if (Reserved != null)
+-					Reserved(this, new EventArgs());
++					Reserved(this, EventArgs.Empty);
+ 
+ 			}
+ 		}
+@@ -98,7 +98,7 @@ public int SourceId
+ 		public void RecycleSoundBuffer()
+ 		{
+ 			if (Recycled != null)
+-				Recycled(this, new EventArgs());
++				Recycled(this, EventArgs.Empty);
+ 		}
+ 
+ 		#region Events
+diff --git a/MonoGame.Framework/MacOS/Audio/SoundEffect.cs b/MonoGame.Framework/MacOS/Audio/SoundEffect.cs
+index 4318c59..ac398b7 100755
+--- a/MonoGame.Framework/MacOS/Audio/SoundEffect.cs
++++ b/MonoGame.Framework/MacOS/Audio/SoundEffect.cs
+@@ -67,9 +67,10 @@ public sealed partial class SoundEffect : IDisposable
+ 		internal byte[] _data;
+ 
+ 		internal float Rate { get; set; }
++
+ 		internal ALFormat Format { get; set; }
+-		internal int Size { get; set; }
+ 
++		internal int Size { get; set; }
+ 
+ 		internal SoundEffect (string fileName)
+ 		{
+@@ -84,7 +85,7 @@ internal SoundEffect (string fileName)
+ 			double rate;
+ 			double duration;
+ 
+-			_data = OpenALSupport.LoadFromFile(_filename,
++			_data = OpenALSupport.LoadFromFile (_filename,
+ 			                                    out size, out format, out rate, out duration);
+ 
+ 			_name = Path.GetFileNameWithoutExtension (fileName);
+@@ -92,7 +93,7 @@ internal SoundEffect (string fileName)
+ 			Rate = (float)rate;
+ 			Size = size;
+ 			Format = format;
+-			_duration = TimeSpan.FromSeconds(duration);
++			_duration = TimeSpan.FromSeconds (duration);
+ 			//Console.WriteLine ("From File: " + _name + " - " + Format + " = " + Rate + " / " + Size + " -- "  + Duration);
+ 
+ 		}
+@@ -102,7 +103,7 @@ internal SoundEffect (string name, byte[] data)
+ 		{
+ 			_data = data;
+ 			_name = name;
+-			LoadAudioStream(_data);
++			LoadAudioStream (_data);
+ 
+ 		}
+ 
+@@ -138,17 +139,18 @@ public SoundEffect (byte[] buffer, int sampleRate, AudioChannels channels)
+ 			_data = mStream.ToArray ();
+ 			_name = "";
+ 
+-			LoadAudioStream(_data);
++			LoadAudioStream (_data);
+ 
+ 		}
+ 
+-		void LoadAudioStream(byte[] audiodata) {
++		void LoadAudioStream (byte[] audiodata)
++		{
+ 			AudioFileStream afs = new AudioFileStream (AudioFileType.WAVE);
+ 			//long pac = afs.DataPacketCount;
+ 			afs.PacketDecoded += HandlePacketDecoded;
+ 
+ 			afs.ParseBytes (audiodata, false);
+-			afs.Close();
++			afs.Close ();
+ 		}
+ 
+ 		void HandlePacketDecoded (object sender, PacketReceivedEventArgs e)
+@@ -178,7 +180,7 @@ void HandlePacketDecoded (object sender, PacketReceivedEventArgs e)
+ 			_data = audioData;
+ 
+ 			var _dblDuration = (e.Bytes / ((asbd.BitsPerChannel / 8) * asbd.ChannelsPerFrame)) / asbd.SampleRate;
+-			_duration = TimeSpan.FromSeconds(_dblDuration);
++			_duration = TimeSpan.FromSeconds (_dblDuration);
+ //			Console.WriteLine ("From Data: " + _name + " - " + Format + " = " + Rate + " / " + Size + " -- "  + Duration);
+ //			Console.WriteLine("Duration: " + _dblDuration
+ //			                  		+ " / size: " + e.Bytes
+@@ -189,6 +191,7 @@ void HandlePacketDecoded (object sender, PacketReceivedEventArgs e)
+ 
+ 		//double _dblDuration = 0;
+ 		TimeSpan _duration = TimeSpan.Zero;
++
+ 		public bool Play ()
+ 		{
+ 			return Play (MasterVolume, 1.0f, 0.0f);
+@@ -247,7 +250,48 @@ public void Dispose ()
+ 				_masterVolume = value;	
+ 			}
+ 		}
+-				
++
++		static float _distanceScale = 1f;
++
++		public static float DistanceScale {
++			get {
++				return _distanceScale;
++			}
++			set {
++				if (value <= 0f) {
++					throw new ArgumentOutOfRangeException ("value of DistanceScale");
++				}
++				_distanceScale = value;
++			}
++		}
++
++		static float _dopplerScale = 1f;
++
++		public static float DopplerScale {
++			get {
++				return _dopplerScale;
++			}
++			set {
++				// As per documenation it does not look like the value can be less than 0
++				//   although the documentation does not say it throws an error we will anyway
++				//   just so it is like the DistanceScale
++				if (value < 0f) {
++					throw new ArgumentOutOfRangeException ("value of DopplerScale");
++				}
++				_dopplerScale = value;
++			}
++		}
++
++		static float speedOfSound = 343.5f;
++
++		public static float SpeedOfSound {
++			get {
++				return speedOfSound;
++			}
++			set {
++				speedOfSound = value;
++			}
++		}		
+ 	}
+ }
+ 
+diff --git a/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs b/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
+index a4b45db..6e17fec 100755
+--- a/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
++++ b/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
+@@ -47,6 +47,8 @@
+ using MonoMac.OpenAL;
+ #endif
+ 
++using Microsoft.Xna.Framework;
++
+ #endregion Statements
+ 
+ namespace Microsoft.Xna.Framework.Audio
+@@ -107,12 +109,33 @@ public void Dispose ()
+ 		
+ 		public void Apply3D (AudioListener listener, AudioEmitter emitter)
+ 		{
+-			throw new NotImplementedException ();
++			Apply3D ( new AudioListener[] { listener }, emitter);
+ 		}
+ 		
+ 		public void Apply3D (AudioListener[] listeners, AudioEmitter emitter)
+ 		{
+-			throw new NotImplementedException ();
++			// get AL's listener position
++			float x, y, z;
++			AL.GetListener (ALListener3f.Position, out x, out y, out z);
++
++			for (int i = 0; i < listeners.Length; i++)
++			{
++				AudioListener listener = listeners[i];
++				
++				// get the emitter offset from origin
++				Vector3 posOffset = emitter.Position - listener.Position;
++				// set up orientation matrix
++				Matrix orientation = Matrix.CreateWorld(Vector3.Zero, listener.Forward, listener.Up);
++				// set up our final position and velocity according to orientation of listener
++				Vector3 finalPos = new Vector3(x + posOffset.X, y + posOffset.Y, z + posOffset.Z);
++				finalPos = Vector3.Transform(finalPos, orientation);
++				Vector3 finalVel = emitter.Velocity;
++				finalVel = Vector3.Transform(finalVel, orientation);
++				
++				// set the position based on relative positon
++				AL.Source(sourceId, ALSource3f.Position, finalPos.X, finalPos.Y, finalPos.Z);
++				AL.Source(sourceId, ALSource3f.Velocity, finalVel.X, finalVel.Y, finalVel.Z);
++			}
+ 		}
+ 
+ 		public void Pause ()
+@@ -190,6 +213,10 @@ public void Stop (bool immediate)
+ 
+ 			set {
+ 				_looped = value;
++				if (hasSourceId) {
++					// Looping
++					AL.Source (sourceId, ALSourceb.Looping, _looped);
++				}
+ 			}
+ 		}
+ 
+@@ -200,6 +227,11 @@ public void Stop (bool immediate)
+ 
+ 			set {
+ 				_pan = value;
++				if (hasSourceId) {
++					// Listener
++					// Pan
++					AL.Source (sourceId, ALSource3f.Position, _pan, 0, 0);
++				}
+ 			}
+ 		}
+ 
+@@ -209,6 +241,11 @@ public void Stop (bool immediate)
+ 			}
+ 			set {
+ 				_pitch = value;
++				if (hasSourceId) {
++					// Pitch
++					AL.Source (sourceId, ALSourcef.Pitch, _pitch);
++				}
++
+ 			}
+ 		}
+ 
+@@ -237,6 +274,11 @@ public void Stop (bool immediate)
+ 			
+ 			set {
+ 				_volume = value;
++				if (hasSourceId) {
++					// Volume
++					AL.Source (sourceId, ALSourcef.Gain, _volume);
++				}
++
+ 			}
+ 		}	
+ 		
+diff --git a/MonoGame.Framework/Matrix.cs b/MonoGame.Framework/Matrix.cs
+index 6b165af..a45e13b 100644
+--- a/MonoGame.Framework/Matrix.cs
++++ b/MonoGame.Framework/Matrix.cs
+@@ -1104,7 +1104,30 @@ public static void CreateTranslation(float xPosition, float yPosition, float zPo
+             result = CreateTranslation(xPosition, yPosition, zPosition);
+         }
+ 
++        public static Matrix CreateWorld(Vector3 position, Vector3 forward, Vector3 up)
++        {
++            Matrix ret;
++                        CreateWorld(ref position, ref forward, ref up, out ret);
++                        return ret;
++        }
+ 
++        public static void CreateWorld(ref Vector3 position, ref Vector3 forward, ref Vector3 up, out Matrix result)
++        {
++                        Vector3 x, y, z;
++                        Vector3.Normalize(ref forward, out z);
++                        Vector3.Cross(ref forward, ref up, out x);
++                        Vector3.Cross(ref x, ref forward, out y);
++                        x.Normalize();
++                        y.Normalize();            
++                        
++                        result = new Matrix();
++                        result.Right = x;
++                        result.Up = y;
++                        result.Forward = z;
++                        result.Translation = position;
++                        result.M44 = 1f;
++        }
++		
+         public float Determinant()
+         {
+             float num22 = this.M11;
+-- 
+1.7.5.4
+
+
+From ba4153f36875c132adbcbddfb0305f82cbbcfcb5 Mon Sep 17 00:00:00 2001
+From: Kenneth Pouncey <kjpou@pt.lu>
+Date: Thu, 5 Jan 2012 10:21:55 +0100
+Subject: [PATCH 6/9] Fix problem with IsActive.  As per documentation the
+ game should continue to calle update and draw methods
+ whether or not the Game window is active or not.
+
+---
+ MonoGame.Framework/Game.cs                  |    4 +-
+ MonoGame.Framework/MacOS/MacGamePlatform.cs |   44 +++++++++++++++++++++++----
+ 2 files changed, 40 insertions(+), 8 deletions(-)
+
+diff --git a/MonoGame.Framework/Game.cs b/MonoGame.Framework/Game.cs
+index 81c5b38..53814a3 100644
+--- a/MonoGame.Framework/Game.cs
++++ b/MonoGame.Framework/Game.cs
+@@ -437,7 +437,7 @@ internal void applyChanges(GraphicsDeviceManager manager)
+ 
+         internal void DoUpdate(GameTime gameTime)
+         {
+-            if (IsActive && _platform.BeforeUpdate(gameTime))
++            if (_platform.BeforeUpdate(gameTime))
+                 Update(gameTime);
+         }
+ 
+@@ -446,7 +446,7 @@ internal void DoDraw(GameTime gameTime)
+             // Draw and EndDraw should not be called if BeginDraw returns false.
+             // http://stackoverflow.com/questions/4054936/manual-control-over-when-to-redraw-the-screen/4057180#4057180
+             // http://stackoverflow.com/questions/4235439/xna-3-1-to-4-0-requires-constant-redraw-or-will-display-a-purple-screen
+-            if (IsActive && _platform.BeforeDraw(gameTime) && BeginDraw())
++            if (_platform.BeforeDraw(gameTime) && BeginDraw())
+             {
+                 Draw(gameTime);
+                 EndDraw();
+diff --git a/MonoGame.Framework/MacOS/MacGamePlatform.cs b/MonoGame.Framework/MacOS/MacGamePlatform.cs
+index 267ee32..160294d 100644
+--- a/MonoGame.Framework/MacOS/MacGamePlatform.cs
++++ b/MonoGame.Framework/MacOS/MacGamePlatform.cs
+@@ -85,6 +85,7 @@ class MacGamePlatform : GamePlatform
+         private GameWindow _gameWindow;
+         private bool _wasResizeable;
+ 	private OpenALSoundController soundControllerInstance = null;
++	private bool _isShouldDraw = true;
+ 
+         public MacGamePlatform(Game game) :
+             base(game)
+@@ -186,22 +187,53 @@ public override bool BeforeUpdate(GameTime gameTime)
+         {
+ 		// Update our OpenAL sound buffer pools
+ 		soundControllerInstance.Update();
++		if (!_isShouldDraw)
++				return false;
+             if (IsPlayingVideo)
+                 return false;
+             return true;
+         }
+ 
++		internal bool IsCanUpdateDraw {
++			get {
++				return _isShouldDraw;
++			}
++			set {
++				if (_isShouldDraw != value) {
++					_isShouldDraw = value;
++				}
++			}
++		}
++
+         public override bool BeforeDraw(GameTime gameTime)
+         {
++		if (!_isShouldDraw)
++				return false;
+             if (IsPlayingVideo)
+                 return false;
+             return true;
+         }
+ 
++		public void EnterBackground ()
++		{
++			_isShouldDraw = false;
++			IsActive = false;
++//			if (Deactivated != null)
++//				Deactivated.Invoke (this, null);
++		}
++
++		public void EnterForeground ()
++		{
++			_isShouldDraw = true;
++			IsActive = true;
++//			if (Activated != null)
++//				Activated.Invoke (this, null);
++		}
++
+         public override void EnterFullScreen()
+         {
+-            bool wasActive = IsActive;
+-            IsActive = false;
++            bool wasActive = IsCanUpdateDraw;
++            IsCanUpdateDraw = false;
+ 
+             // I will leave this here just in case someone can figure out how
+             // to do a full screen with this and still get Alt + Tab to friggin
+@@ -228,7 +260,7 @@ public override void EnterFullScreen()
+             Window.Window.HidesOnDeactivate = true;
+             Mouse.ResetMouse();
+ 
+-            IsActive = wasActive;
++            IsCanUpdateDraw = wasActive;
+         }
+ 
+         public override void ExitFullScreen()
+@@ -238,8 +270,8 @@ public override void ExitFullScreen()
+             // Changing window style forces a redraw. Some games
+             // have fail-logic and toggle fullscreen in their draw function,
+             // so temporarily become inactive so it won't execute.
+-            bool wasActive = IsActive;
+-            IsActive = false;
++            bool wasActive = IsCanUpdateDraw;
++            IsCanUpdateDraw = false;
+ 
+             // I will leave this here just in case someone can figure out how to do
+             //  a full screen with this and still get Alt + Tab to friggin work.
+@@ -265,7 +297,7 @@ public override void ExitFullScreen()
+             _mainWindow.HidesOnDeactivate = false;
+             Mouse.ResetMouse();
+ 
+-            IsActive = wasActive;
++            IsCanUpdateDraw = wasActive;
+         }
+ 
+         protected override void OnIsMouseVisibleChanged()
+-- 
+1.7.5.4
+
+
+From 823484c2f3d4490ad439f1e008e2142b18ed44af Mon Sep 17 00:00:00 2001
+From: Kenneth Pouncey <kjpou@pt.lu>
+Date: Sun, 8 Jan 2012 17:25:35 +0100
+Subject: [PATCH 7/9] A small adjustment for panning.
+
+---
+ MonoGame.Framework/Game.cs                         |    1 +
+ .../MacOS/Audio/SoundEffectInstance.cs             |    4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/MonoGame.Framework/Game.cs b/MonoGame.Framework/Game.cs
+index 53814a3..2f8691e 100644
+--- a/MonoGame.Framework/Game.cs
++++ b/MonoGame.Framework/Game.cs
+@@ -81,6 +81,7 @@ 1. Definitions
+ namespace Microsoft.Xna.Framework
+ {
+     public class Game : IDisposable
++
+     {
+         private const float DefaultTargetFramesPerSecond = 60.0f;
+ 
+diff --git a/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs b/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
+index 6e17fec..8577180 100755
+--- a/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
++++ b/MonoGame.Framework/MacOS/Audio/SoundEffectInstance.cs
+@@ -154,7 +154,7 @@ private void ApplyState ()
+ 			AL.DistanceModel (ALDistanceModel.InverseDistanceClamped);
+ 			// Listener
+ 			// Pan
+-			AL.Source (sourceId, ALSource3f.Position, _pan, 0, 0);
++			AL.Source (sourceId, ALSource3f.Position, _pan, 0, 0.1f);
+ 			// Volume
+ 			AL.Source (sourceId, ALSourcef.Gain, _volume);
+ 			// Looping
+@@ -230,7 +230,7 @@ public void Stop (bool immediate)
+ 				if (hasSourceId) {
+ 					// Listener
+ 					// Pan
+-					AL.Source (sourceId, ALSource3f.Position, _pan, 0, 0);
++					AL.Source (sourceId, ALSource3f.Position, _pan, 0.0f, 0.1f);
+ 				}
+ 			}
+ 		}
+-- 
+1.7.5.4
+
+
+From ac69bd2c5c2824ebfad663cdc3d6f6b74a0d48b4 Mon Sep 17 00:00:00 2001
+From: Kenneth Pouncey <kjpou@pt.lu>
+Date: Wed, 11 Jan 2012 08:05:04 +0100
+Subject: [PATCH 8/9] Fix regression with GetData for RenderTargets.  Added
+ SaveAsJpeg and SaveAsPng methods
+
+---
+ MonoGame.Framework/MacOS/Graphics/Texture2D.cs |  135 ++++++++++++++++++------
+ 1 files changed, 103 insertions(+), 32 deletions(-)
+
+diff --git a/MonoGame.Framework/MacOS/Graphics/Texture2D.cs b/MonoGame.Framework/MacOS/Graphics/Texture2D.cs
+index 21ff60c..0243848 100644
+--- a/MonoGame.Framework/MacOS/Graphics/Texture2D.cs
++++ b/MonoGame.Framework/MacOS/Graphics/Texture2D.cs
+@@ -45,6 +45,7 @@ 1. Definitions
+ using MonoMac.AppKit;
+ using MonoMac.CoreGraphics;
+ using MonoMac.Foundation;
++using MonoMac.ImageIO;
+ 
+ using MonoMac.OpenGL;
+ 
+@@ -543,6 +544,11 @@ private byte[] GetImageData (int level)
+ 			
+ 			GL.GetTexImage (TextureTarget.Texture2D, level, PixelFormat.Rgba, PixelType.UnsignedByte, imageInfo);
+ 
++			// For RenderTextures we need to flip the data.
++			if (texture == null) {
++				flipImageData (imageInfo, _width, _height, 4);
++			}
++
+ 			return imageInfo;
+ 					
+ 		}
+@@ -580,7 +586,7 @@ public void GetData<T> (int level, Rectangle? rect, T[] data, int startIndex, in
+ 			}
+ 
+ 			byte[] imageInfo = GetImageData (0);
+-			
++
+ 			// Get the Color values
+ 			if (typeof(T) == typeof(uint))
+ 			{
+@@ -631,36 +637,7 @@ public void GetData<T> (int level, Rectangle? rect, T[] data, int startIndex, in
+ 				int rWidth = r.Width;
+ 				int rHeight = r.Height;
+ 
+-//				if (texture == null) {
+-//					// For rendertargets we need to loop through and load the elements
+-//					// backwards because the texture data is flipped vertically and horizontally
+-//					var dataEnd = (rWidth * rHeight) - 1;
+-//					var dataPos = 0;
+-//					var dataRowColOffset = 0;
+-//					for (int y = r.Top; y < rHeight; y++) {
+-//						for (int x = r.Left; x < rWidth; x++) {
+-//							var result = new Color (0, 0, 0, 0);						
+-//							dataRowColOffset = ((y * rWidth) + x);
+-//							switch (_format) {
+-//							case SurfaceFormat.Color : //kTexture2DPixelFormat_RGBA8888
+-//							case SurfaceFormat.Dxt3 :
+-//								
+-//								dataPos = dataRowColOffset * 4;								
+-//															
+-//								result.R = imageInfo [dataPos];
+-//								result.G = imageInfo [dataPos + 1];
+-//								result.B = imageInfo [dataPos + 2];
+-//								result.A = imageInfo [dataPos + 3];
+-//								break;
+-//							default:
+-//								throw new NotSupportedException ("Texture format");
+-//							}
+-//							data [dataEnd - dataRowColOffset] = (T)(object)result;
+-//						}
+-//
+-//
+-//					}
+-//				} else {
++
+ 					// Loop through and extract the data but we need to load it 
+ 					var dataRowColOffset = 0;
+ 					var sz = 0;
+@@ -731,11 +708,105 @@ public void GetData<T> (int level, Rectangle? rect, T[] data, int startIndex, in
+ 							data [((y - r.Top) * r.Width) + (x - r.Left)] = (T)(object)result;
+ 						}
+ 					}
+-				//}
+ 			} else {
+ 				throw new NotImplementedException ("GetData not implemented for type.");
+ 			}
+ 		}
++
++		CGImage createRGBImageFromBufferData (int mByteWidth, int mWidth, int mHeight)
++		{
++
++			CGColorSpace cSpace = CGColorSpace.CreateDeviceRGB ();
++
++			CGImageAlphaInfo ai = (CGImageAlphaInfo)((int)CGImageAlphaInfo.NoneSkipFirst | (int)CGBitmapFlags.ByteOrder32Little) ;
++
++			CGBitmapContext bitmap;
++			byte[] mData = GetImageData(0);
++			try {
++				unsafe {
++
++					fixed (byte* ptr = mData) {
++						bitmap = new CGBitmapContext ((IntPtr)ptr,mWidth,mHeight,8,mByteWidth,cSpace, ai);
++					}
++				}
++			} catch {
++
++			}
++
++			CGImage image = bitmap.ToImage ();
++
++			return image;
++
++
++		}
++
++		public void SaveAsJpeg (Stream stream, int width, int height)
++		{
++			int mByteWidth = width * 4;         // Assume 4 bytes/pixel for now
++			mByteWidth = (mByteWidth + 3) & ~3;    // Align to 4 bytes
++
++			CGImage imageRef = createRGBImageFromBufferData (mByteWidth, width, height);
++	
++//			CGImageDestination dest = CGImageDestination.FromUrl (url, "public.tiff", 1, null);
++//			dest.AddImage (imageRef, null);
++//
++//			bool success = dest.Close ();
++			//                        if (success == false)
++			//                                Console.WriteLine("did not work");
++			//                        else
++			//                                Console.WriteLine("did work");
++
++			// *** NOTE ** CGImageDestination is not working for some reason
++			//  so we will write this out using .net
++
++			//  get an NSBitmapImageRep of the CGImage
++			NSBitmapImageRep rep = new NSBitmapImageRep (imageRef);
++			//  obtain the NSData as Tiff image format
++			NSData data = rep.RepresentationUsingTypeProperties (NSBitmapImageFileType.Jpeg, new NSDictionary ());
++			//  write the Tiff formatted data as a stream to the out file.
++			WriteImageToStream (data.AsStream (), stream);
++		}
++
++		public void SaveAsPng (Stream stream, int width, int height)
++		{
++			int mByteWidth = width * 4;         // Assume 4 bytes/pixel for now
++			mByteWidth = (mByteWidth + 3) & ~3;    // Align to 4 bytes
++
++			CGImage imageRef = createRGBImageFromBufferData (mByteWidth, width, height);
++	
++//			CGImageDestination dest = CGImageDestination.FromUrl (url, "public.tiff", 1, null);
++//			dest.AddImage (imageRef, null);
++//
++//			bool success = dest.Close ();
++			//                        if (success == false)
++			//                                Console.WriteLine("did not work");
++			//                        else
++			//                                Console.WriteLine("did work");
++
++			// *** NOTE ** CGImageDestination is not working for some reason
++			//  so we will write this out using .net
++
++			//  get an NSBitmapImageRep of the CGImage
++			NSBitmapImageRep rep = new NSBitmapImageRep (imageRef);
++			//  obtain the NSData as Tiff image format
++			NSData data = rep.RepresentationUsingTypeProperties (NSBitmapImageFileType.Png, new NSDictionary ());
++			//  write the Tiff formatted data as a stream to the out file.
++			WriteImageToStream (data.AsStream (), stream);
++		}
++
++		public void WriteImageToStream (Stream source, Stream target)
++		{
++			byte[] buffer = new byte[0x10000];
++			int bytes;
++			try {
++				while ((bytes = source.Read (buffer, 0, buffer.Length)) > 0) {
++					target.Write (buffer, 0, bytes);
++				}
++			} finally {
++				target.Close ();
++	
++			}
++		}
+ 	}
+ }
+ 
+-- 
+1.7.5.4
+
+
+From 27d1c6737d91ca6e0e259f2bd6d9db4c68bf43c3 Mon Sep 17 00:00:00 2001
+From: Kenneth Pouncey <kjpou@pt.lu>
+Date: Wed, 11 Jan 2012 08:07:06 +0100
+Subject: [PATCH 9/9] Changed method modifiers to private
+
+---
+ MonoGame.Framework/MacOS/Graphics/Texture2D.cs |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/MonoGame.Framework/MacOS/Graphics/Texture2D.cs b/MonoGame.Framework/MacOS/Graphics/Texture2D.cs
+index 0243848..48eed41 100644
+--- a/MonoGame.Framework/MacOS/Graphics/Texture2D.cs
++++ b/MonoGame.Framework/MacOS/Graphics/Texture2D.cs
+@@ -713,7 +713,7 @@ public void GetData<T> (int level, Rectangle? rect, T[] data, int startIndex, in
+ 			}
+ 		}
+ 
+-		CGImage createRGBImageFromBufferData (int mByteWidth, int mWidth, int mHeight)
++		private CGImage createRGBImageFromBufferData (int mByteWidth, int mWidth, int mHeight)
+ 		{
+ 
+ 			CGColorSpace cSpace = CGColorSpace.CreateDeviceRGB ();
+@@ -794,7 +794,7 @@ public void SaveAsPng (Stream stream, int width, int height)
+ 			WriteImageToStream (data.AsStream (), stream);
+ 		}
+ 
+-		public void WriteImageToStream (Stream source, Stream target)
++		private void WriteImageToStream (Stream source, Stream target)
+ 		{
+ 			byte[] buffer = new byte[0x10000];
+ 			int bytes;
+-- 
+1.7.5.4
+
