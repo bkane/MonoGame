@@ -254,7 +254,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			} else {
 				//HACK HACK HACK - add a tiny offset to tex coords to prevent filtering artifacts in DLC Quest
 				texCoordTL.X = texture.Image.GetTextureCoordX (tempRect.X) + 0.0001f;
-				texCoordTL.Y = texture.Image.GetTextureCoordY (tempRect.Y);
+				texCoordTL.Y = texture.Image.GetTextureCoordY (tempRect.Y) + 0.0001f;
 				texCoordBR.X = texture.Image.GetTextureCoordX (tempRect.X + tempRect.Width);
 				texCoordBR.Y = texture.Image.GetTextureCoordY (tempRect.Y + tempRect.Height);
 			}
