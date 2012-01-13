@@ -297,7 +297,7 @@ namespace Microsoft.Xna.Framework
             // some problems on some Microsoft samples which we are not handling
             // correctly.
             graphicsDeviceManager.CreateDevice();
-            applyChanges(graphicsDeviceManager);
+            applyChanges();
 
             _platform.BeforeInitialize();
             Initialize();
@@ -417,7 +417,7 @@ namespace Microsoft.Xna.Framework
         //        break entirely the possibility that additional platforms could
         //        be added by third parties without changing MonoGame itself.
 
-        internal void applyChanges(GraphicsDeviceManager manager)
+        internal void applyChanges()
         {
             if (GraphicsDevice.PresentationParameters.IsFullScreen)
                 _platform.EnterFullScreen();
@@ -434,7 +434,9 @@ namespace Microsoft.Xna.Framework
             viewport.Height = GraphicsDevice.PresentationParameters.BackBufferHeight;
 
             GraphicsDevice.Viewport = viewport;
-        }
+			
+			_platform.Window.OpenGLContext.SwapInterval = graphicsDeviceManager.SynchronizeWithVerticalRetrace;
+         }
 
         internal void DoUpdate(GameTime gameTime)
         {
