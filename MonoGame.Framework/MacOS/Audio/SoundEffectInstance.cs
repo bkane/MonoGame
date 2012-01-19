@@ -184,7 +184,11 @@ namespace Microsoft.Xna.Framework.Audio
 
 		public void Resume ()
 		{
-			Play ();
+			if (hasSourceId)
+			{
+				controller.PlaySound(soundBuffer);
+				soundState = SoundState.Playing;
+			}
 		}
 
 		public void Stop ()
