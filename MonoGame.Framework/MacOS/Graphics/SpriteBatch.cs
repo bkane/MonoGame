@@ -185,9 +185,6 @@ namespace Microsoft.Xna.Framework.Graphics
 			GL.FrontFace (FrontFaceDirection.Cw);
 			GL.Color4 (1.0f, 1.0f, 1.0f, 1.0f);
 			
-			int program = -1;
-			GL.GetInteger(GetPName.CurrentProgram, out program);
-			
 			_batcher.DrawBatch (_sortMode, _samplerState);
 	
 			// Disable Scissor Tests if necessary
