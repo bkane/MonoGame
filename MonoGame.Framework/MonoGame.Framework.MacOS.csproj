@@ -165,7 +165,6 @@
     <Compile Include="Graphics\RenderTargetUsage.cs" />
     <Compile Include="MacOS\Graphics\ESImage.cs" />
     <Compile Include="MacOS\Graphics\ESTexture2D.cs" />
-    <Compile Include="MacOS\Graphics\Vertices\VertexBuffer.cs" />
     <Compile Include="Graphics\TextureUsage.cs" />
     <Compile Include="Graphics\SetDataOptions.cs" />
     <Compile Include="MacOS\Content\Texture2DReader.cs" />
@@ -180,6 +179,9 @@
     <Compile Include="Content\ContentReaders\StringReader.cs" />
     <Compile Include="Content\ContentReaders\RectangleReader.cs" />
     <Compile Include="Content\ContentReaders\Vector3Reader.cs" />
+    <Compile Include="Content\ContentReaders\PlaneReader.cs" />
+    <Compile Include="Content\ContentReaders\QuaternionReader.cs" />
+    <Compile Include="Content\ContentReaders\Vector4Reader.cs" />
     <Compile Include="Input\Touch\GestureType.cs" />
     <Compile Include="Input\Touch\TouchCollection.cs" />
     <Compile Include="Input\Touch\TouchLocation.cs" />
@@ -228,7 +230,6 @@
     <Compile Include="MacOS\Graphics\GraphicsExtensions.cs" />
     <Compile Include="MacOS\Graphics\States\GLStateManager.cs" />
     <Compile Include="MacOS\Graphics\Effect\EffectPass.cs" />
-    <Compile Include="MacOS\Graphics\Vertices\IndexBuffer.cs" />
     <Compile Include="MacOS\Graphics\Vertices\VertexDeclaration.cs" />
     <Compile Include="MacOS\GameWindow.cs" />
     <Compile Include="PreparingDeviceSettingsEventArgs.cs" />
@@ -246,7 +247,7 @@
     <Compile Include="MacOS\KeyUtil.cs" />
     <Compile Include="Graphics\States\TextureAddressMode.cs" />
     <Compile Include="Graphics\States\TextureFilter.cs" />
-    <Compile Include="MacOS\Input\GamePad.cs" />
+    <Compile Include="Desktop\Input\GamePad.cs" />
     <Compile Include="Input\ButtonDefinition.cs" />
     <Compile Include="Input\ThumbStickDefinition.cs" />
     <Compile Include="MacOS\GamerServices\SignedInGamer.cs" />
@@ -339,6 +340,8 @@
     <Compile Include="MacOS\Graphics\Effect\VSBasicEffectcs" />
     <Compile Include="Graphics\Vertices\VertexElementColor.cs" />
     <Compile Include="Graphics\Vertices\IndexElementSize.cs" />
+    <Compile Include="Graphics\Vertices\IndexBuffer.cs" />
+    <Compile Include="Graphics\Vertices\VertexBuffer.cs" />
     <Compile Include="Audio\XactSound.cs" />
     <Compile Include="Audio\XactClip.cs" />
     <Compile Include="Game.cs" />
@@ -349,6 +352,8 @@
     <Compile Include="MacOS\Audio\OpenALSupport.cs" />
     <Compile Include="MacOS\Audio\SoundEffect.cs" />
     <Compile Include="MacOS\Audio\SoundEffectInstance.cs" />
+    <Compile Include="MacOS\MacGamePlatform+Synchronous.cs" />
+    <Compile Include="LaunchParameters.cs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="MacOS\" />

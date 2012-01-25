@@ -37,82 +37,47 @@ permitted under your local laws, the contributors exclude the implied warranties
 purpose and non-infringement.
 */
 #endregion License
-﻿using System;
+
+using System;
+using Microsoft.Xna.Framework.Input.Touch;
 
 namespace Microsoft.Xna.Framework.Input
-{    
-	public struct MouseState
-	{
-		int _x, _y;
-		int _scrollWheelValue;
-		ButtonState _leftButton;
-		ButtonState _rightButton;
-		ButtonState _middleButton;
+{
+    public static class Mouse
+    {
+        private static int _x, _y;
+
+        public static IntPtr WindowHandle { get; set; }
 		
-		internal MouseState (int x,int y)
-		{
-			_x = x;
-			_y = y;
-			
-			_scrollWheelValue = 0;
-			
-			_leftButton = ButtonState.Released;
-			_rightButton = ButtonState.Released;
-			_middleButton = ButtonState.Released;
-		}
+        public static MouseState GetState()
+        {
+            var state = TouchPanel.GetState();
+            if (state.Count > 0)
+            {
+                var middlePosition = Vector2.Zero;
+                var currentNumberOfTouches = 0;
+                for (int i = 0; i < state.Count; i++)
+                {
+                    if (state[i].State == TouchLocationState.Pressed ||
+                        state[i].State == TouchLocationState.Moved)
+                    {
+                        middlePosition += state[i].Position;
+                        currentNumberOfTouches++;
+                        break;
+                    }
+                }
 
-		public int X {
-			get {
-				return _x;
-			}
+                if (currentNumberOfTouches > 1)
+                    middlePosition /= currentNumberOfTouches;
 
-		}
-
-		public int Y {
-			get {
-				return _y;
-			}
-		}
-
-		public ButtonState LeftButton { 
-			get {
-				return _leftButton;
-			}
-			internal set { _leftButton = value; }
-		}
-
-		public ButtonState MiddleButton { 
-			get {
-				return _middleButton;
-			}
-			internal set { _middleButton = value; }			
-		}
-
-		public ButtonState RightButton { 
-			get {
-				return _rightButton;
-			}
-			internal set { _rightButton = value; }
-		}
-
-		public int ScrollWheelValue { 
-			get {
-				return _scrollWheelValue;
-			}
-			internal set { _scrollWheelValue = value; }
-		}
-
-		public ButtonState XButton1 { 
-			get {
-				return ButtonState.Released;
-			}
-		}
-
-		public ButtonState XButton2 { 
-			get {
-				return ButtonState.Released;
-			}
-		}
-	}
+                if (middlePosition != Vector2.Zero)
+                {
+                    _x = (int) middlePosition.X;
+                    _y = (int) middlePosition.Y;
+                }
+            }
+            return new MouseState(_x, _y);
+        }
+    }
 }
 

@@ -130,7 +130,7 @@ namespace Microsoft.Xna.Framework.Audio
 		public void Resume()
 		{
 			if (curSound != null) {
-				curSound.Play ();
+				curSound.Resume ();
 			}
 			paused = false;
 		}

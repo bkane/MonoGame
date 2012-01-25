@@ -139,18 +139,24 @@ namespace Microsoft.Xna.Framework.Content
         }
 
         public T ReadExternalReference<T>()
-        {
+		{
             string externalAssetName = ReadString();
             if (!String.IsNullOrEmpty(externalAssetName))
             {
                 // Use Path.GetFullPath to help resolve relative directories
                 string fullRootPath = Path.GetFullPath(contentManager.RootDirectory);
+#if ANDROID
+				// The code didnt work on android because of the content path, this code does work.
+				string fullAssetPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.Combine(fullRootPath,assetName)), externalAssetName));
+                externalAssetName = fullAssetPath.Substring(fullRootPath.Length + 3);
+#else				
 				assetName = assetName.Replace("\\", "/");
 				externalAssetName = externalAssetName.Replace("\\", "/");
 				string assetDirectory = Path.GetDirectoryName(assetName);
 				string assetDirectoryPath = Path.Combine(fullRootPath, assetDirectory);
                 string fullAssetPath = Path.Combine(assetDirectoryPath, externalAssetName);
-                externalAssetName = fullAssetPath.Substring(fullRootPath.Length + 1);
+				externalAssetName = fullAssetPath.Substring(fullRootPath.Length + 1);
+#endif				
                 return contentManager.Load<T>(externalAssetName);
             }
             return default(T);
@@ -299,14 +305,9 @@ namespace Microsoft.Xna.Framework.Content
             return result;
         }
 
-        internal int Read7BitEncodedInt()
+        internal new int Read7BitEncodedInt()
         {
             return base.Read7BitEncodedInt();
-        }
-
-        public void Dispose()
-        {
-            base.Dispose(true);
         }
     }
 }

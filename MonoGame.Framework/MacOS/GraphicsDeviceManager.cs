@@ -54,7 +54,7 @@ namespace Microsoft.Xna.Framework
 		private bool _preferMultiSampling;
 		private DisplayOrientation _supportedOrientations;
 		private bool wantFullScreen = false;
-		private bool _synchronizeWithVerticalRetrace = false;
+		private bool synchronizedWithVerticalRefresh = true;
 
 		public GraphicsDeviceManager (Game game)
 		{
@@ -258,10 +258,10 @@ namespace Microsoft.Xna.Framework
 
 		public bool SynchronizeWithVerticalRetrace {
 			get {
-				return _synchronizeWithVerticalRetrace;
+				return synchronizedWithVerticalRefresh;
 			}
 			set {
-				_synchronizeWithVerticalRetrace = value;
+				synchronizedWithVerticalRefresh = value;
 			}
 		}
 

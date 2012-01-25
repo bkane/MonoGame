@@ -108,13 +108,13 @@ namespace Microsoft.Xna.Framework.Content
             PropertyInfo property = member as PropertyInfo;
             FieldInfo field = member as FieldInfo;
             if (property != null && property.CanWrite == false) return;
-            Attribute contentSerializerIgnore = Attribute.GetCustomAttribute(member, typeof(ContentSerializerIgnoreAttribute));
-            if (contentSerializerIgnore != null) return;
-            Attribute contentSerializerAttr = Attribute.GetCustomAttribute(member, typeof(ContentSerializerAttribute));
+            Attribute attr = Attribute.GetCustomAttribute(member, typeof(ContentSerializerIgnoreAttribute));
+            if (attr != null) return;
+            Attribute attr2 = Attribute.GetCustomAttribute(member, typeof(ContentSerializerAttribute));
             bool isSharedResource = false;
-            if (contentSerializerAttr != null)
+            if (attr2 != null)
             {
-                var cs = contentSerializerAttr as ContentSerializerAttribute;
+                var cs = attr2 as ContentSerializerAttribute;
                 isSharedResource = cs.SharedResource;
             }
             else
@@ -123,12 +123,14 @@ namespace Microsoft.Xna.Framework.Content
                 {
                     foreach (MethodInfo info in property.GetAccessors(true))
                     {
-                        if (info.IsPublic == false) return;
+                        if (info.IsPublic == false)
+                            return;
                     }
                 }
                 else
                 {
-                    if (!field.IsPublic) return;
+                    if (!field.IsPublic)
+                        return;
                 }
             }
             ContentTypeReader reader = null;
@@ -153,10 +155,9 @@ namespace Microsoft.Xna.Framework.Content
                 }
                 else
                 {
-                    if (!field.IsPrivate || (contentSerializerAttr != null))
-					{
-						field.SetValue(parent, obj2);
-					}
+                    // Private fields can be serialized if they have ContentSerializerAttribute added to them
+                    if (field.IsPrivate == false || attr2 != null)
+                        field.SetValue(parent, obj2);
                 }
             }
             else
