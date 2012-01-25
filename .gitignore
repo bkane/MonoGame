@@ -52,3 +52,6 @@ monodroid*.msi
 
 #Unix temporary files
 *~
+
+
+*.orig
