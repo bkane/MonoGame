@@ -296,7 +296,7 @@ namespace Microsoft.Xna.Framework
                 // FIXME: EnterFullScreen gets called very early and interferes
                 //        with Synchronous mode, so disabling this for now.
                 //        Hopefully this does not cause excessive havoc.
-                //_mainWindow.MakeKeyAndOrderFront(Window);
+                _mainWindow.MakeKeyAndOrderFront(Window);
                 ResetWindowBounds();
                 _mainWindow.HidesOnDeactivate = true;
                 Mouse.ResetMouse();
@@ -337,7 +337,7 @@ namespace Microsoft.Xna.Framework
                 // FIXME: EnterFullScreen gets called very early and interferes
                 //        with Synchronous mode, so disabling this for now.
                 //        Hopefully this does not cause excessive havoc.
-                //_mainWindow.MakeKeyAndOrderFront(Window);
+                _mainWindow.MakeKeyAndOrderFront(Window);
                 ResetWindowBounds();
                 _mainWindow.HidesOnDeactivate = false;
                 Mouse.ResetMouse();
