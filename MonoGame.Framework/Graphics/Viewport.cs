@@ -107,7 +107,6 @@ namespace Microsoft.Xna.Framework.Graphics
 			get{ return x;}
 			set{ x = value;}
 		}
-		#endregion
 		
 		public float AspectRatio 
 		{
@@ -148,6 +147,18 @@ namespace Microsoft.Xna.Framework.Graphics
 			{
 				return new Rectangle(x,y,width,height);
 			}
+		}
+		#endregion
+		
+		public Viewport(int x, int y, int width, int height)
+		{
+			this.x = x;
+			this.y = y;
+			this.width = width;
+			this.height = height;
+			
+			this.minDepth = 0;
+			this.maxDepth = 0;
 		}
 
         public Vector3 Project(Vector3 source, Matrix projection, Matrix view, Matrix world)
