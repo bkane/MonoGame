@@ -341,6 +341,8 @@ namespace Microsoft.Xna.Framework
                 ResetWindowBounds();
                 _mainWindow.HidesOnDeactivate = false;
                 Mouse.ResetMouse();
+				
+				_mainWindow.Center();
             }
             finally { ResumeUpdatingAndDrawing(); }
         }
