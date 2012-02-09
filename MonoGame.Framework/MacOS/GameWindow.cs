@@ -537,13 +537,11 @@ namespace Microsoft.Xna.Framework
 				cursor = new NSCursor(cursorImage, NSColor.Clear, NSColor.Clear, new PointF(0,0));
 			}
 			
-			/*
 			// if the cursor is not to be visible then we us our custom cursor.
 			if (!_game.IsMouseVisible)
-				AddCursorRectcursor(Frame, cursor);
+				AddCursorRect(Frame, cursor);
 			else
-				AddCursorRectcursor(Frame, NSCursor.CurrentSystemCursor);
-				*/
+				AddCursorRect(Frame, NSCursor.CurrentSystemCursor);
 
 		}
 
