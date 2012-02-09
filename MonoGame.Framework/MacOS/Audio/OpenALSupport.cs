@@ -101,7 +101,8 @@ namespace Microsoft.Xna.Framework.Audio
 
 				GCHandle meBePinned = GCHandle.Alloc (dataBuffer, GCHandleType.Pinned);
 				IntPtr meBePointer = meBePinned.AddrOfPinnedObject ();
-
+				
+				IntPtr savedDataPtr = audioBufferList.Buffers [0].Data;
 				audioBufferList.Buffers [0].Data = meBePointer;
 
 
@@ -132,6 +133,7 @@ namespace Microsoft.Xna.Framework.Audio
 				} finally {
 					// Don't forget to free our dataBuffer memory pointer that was pinned above
 					meBePinned.Free ();
+					audioBufferList.Buffers[0].Data = savedDataPtr;
 				}
 			}
 			return true;
