@@ -556,7 +556,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			// Recompute the diffuse/emissive/alpha material color parameters?
 			if ((dirtyFlags & EffectDirtyFlags.MaterialColor) != 0) {
-				EffectHelpers.SetMaterialColor (lightingEnabled, alpha, ref diffuseColor, ref emissiveColor, ref ambientLightColor, diffuseColorParam, emissiveColorParam);
+				//EffectHelpers.SetMaterialColor (lightingEnabled, alpha, ref diffuseColor, ref emissiveColor, ref ambientLightColor, diffuseColorParam, emissiveColorParam);
 
 				dirtyFlags &= ~EffectDirtyFlags.MaterialColor;
 			}

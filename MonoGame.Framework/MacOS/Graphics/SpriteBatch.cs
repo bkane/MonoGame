@@ -174,7 +174,10 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			//GL.Disable (EnableCap.DepthTest);
 			
-			GL.TexEnv (TextureEnvTarget.TextureEnv, TextureEnvParameter.TextureEnvMode, (int)All.BlendSrc);
+			//GL.TexEnv (TextureEnvTarget.TextureEnv, TextureEnvParameter.TextureEnvMode, (int)All.BlendSrc);
+			GL.BlendFunc(BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
+			GL.Enable(EnableCap.Blend);
+			GL.BlendEquation(BlendEquationMode.FuncAdd);
 			GL.Enable (EnableCap.Texture2D);
 			GL.EnableClientState (ArrayCap.VertexArray);
 			GL.EnableClientState (ArrayCap.ColorArray);
@@ -203,7 +206,14 @@ namespace Microsoft.Xna.Framework.Graphics
 			
 			spriteEffect.CurrentTechnique.Passes [0].Apply ();
 
-
+			var error = GL.GetError();
+			while (error != ErrorCode.NoError)
+			{
+				Console.WriteLine("GLError: " + error);
+				error = GL.GetError();
+			}
+			
+			graphicsDevice.UnsetGraphicsStates();
 		}
 
 		public void Draw (Texture2D texture,
@@ -250,8 +260,8 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			} else {
 				//HACK HACK HACK - add a tiny offset to tex coords to prevent filtering artifacts in DLC Quest
-				texCoordTL.X = texture.Image.GetTextureCoordX (tempRect.X) + 0.0001f;
-				texCoordTL.Y = texture.Image.GetTextureCoordY (tempRect.Y) + 0.0001f;
+				texCoordTL.X = texture.Image.GetTextureCoordX (tempRect.X);// + 0.0001f;
+				texCoordTL.Y = texture.Image.GetTextureCoordY (tempRect.Y);//) + 0.0001f;
 				texCoordBR.X = texture.Image.GetTextureCoordX (tempRect.X + tempRect.Width);
 				texCoordBR.Y = texture.Image.GetTextureCoordY (tempRect.Y + tempRect.Height);
 			}
