@@ -166,7 +166,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				GL.Scissor (this.graphicsDevice.ScissorRectangle.X, this.graphicsDevice.ScissorRectangle.Y, this.graphicsDevice.ScissorRectangle.Width, this.graphicsDevice.ScissorRectangle.Height);
 			}
 
-			//GL.LoadMatrix (ref _matrix.M11);
+			GL.LoadMatrix (ref _matrix.M11);
 			
 
 			// Initialize OpenGL states (ideally move this to initialize somewhere else)
