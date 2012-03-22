@@ -395,7 +395,12 @@ namespace Microsoft.Xna.Framework.Graphics
 					// create a renderbuffer object to store depth info
 					GL.BindRenderbuffer(RenderbufferTarget.RenderbufferExt, renderBufferIDs[i]);
 
-					ClearOptions clearOptions = ClearOptions.Target | ClearOptions.DepthBuffer;
+					ClearOptions clearOptions = ClearOptions.Target;
+					
+					if (target.DepthStencilFormat != DepthFormat.None)
+					{
+						clearOptions |= ClearOptions.DepthBuffer;
+					}
 
 					// create framebuffer
 					GL.GenFramebuffers(1, out frameBufferIDs[i]);
@@ -418,6 +423,11 @@ namespace Microsoft.Xna.Framework.Graphics
 							RenderbufferTarget.RenderbufferExt, renderBufferIDs[i]);
 						clearOptions = clearOptions | ClearOptions.Stencil;
 						break;
+					case DepthFormat.None:
+						{
+							//do nothing
+						}
+						break;
 					default:
 						GL.RenderbufferStorage(RenderbufferTarget.RenderbufferExt, RenderbufferStorage.DepthComponent24,
 							target.Width, target.Height);
@@ -428,9 +438,12 @@ namespace Microsoft.Xna.Framework.Graphics
 					GL.FramebufferTexture2D(FramebufferTarget.FramebufferExt, FramebufferAttachment.ColorAttachment0,
 						TextureTarget.Texture2D, target.ID,0);
 					
-					// attach the renderbuffer to depth attachment point
-					GL.FramebufferRenderbuffer(FramebufferTarget.FramebufferExt, FramebufferAttachment.DepthAttachmentExt,
-						RenderbufferTarget.RenderbufferExt, renderBufferIDs[i]);					
+					if (target.DepthStencilFormat != DepthFormat.None)
+					{
+						// attach the renderbuffer to depth attachment point
+						GL.FramebufferRenderbuffer(FramebufferTarget.FramebufferExt, FramebufferAttachment.DepthAttachmentExt,
+							RenderbufferTarget.RenderbufferExt, renderBufferIDs[i]);	
+					}
 					
 					if (target.RenderTargetUsage == RenderTargetUsage.DiscardContents)
 						Clear (clearOptions, Color.Transparent, 0, 0);
