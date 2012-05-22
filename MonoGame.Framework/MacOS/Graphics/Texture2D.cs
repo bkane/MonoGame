@@ -143,6 +143,21 @@ namespace Microsoft.Xna.Framework.Graphics
 			GL.TexImage2D (TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, _width, _height, 0, PixelFormat.Rgba, PixelType.UnsignedByte, textureData);			
 			
 			GL.BindTexture (TextureTarget.Texture2D, 0);
+			
+			var error = GL.GetError();
+			
+			while(error != ErrorCode.NoError)
+			{
+				Console.WriteLine("Error creating Texture2D! glError: {0} width: {1} height: {2} mipmap: {3} format: {4} stack: {5}",
+				                                   error.ToString(),
+				                                   this._width,
+				                                   this._height,
+				                                   this._mipmap,
+				                                   this._format.ToString(),
+				                                   System.Environment.StackTrace);
+				
+				error = GL.GetError();
+			}
 
 			// The following is left here for testing purposes
 //			NSImage image = new NSImage (new SizeF (_width, _height));

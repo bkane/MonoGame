@@ -167,17 +167,26 @@ namespace Microsoft.Xna.Framework.Storage
 			_playerIndex = playerIndex;
 			
 			// From the examples the root is based on MyDocuments folder
-			var root = StorageDevice.StorageRoot;
-			var saved = Path.Combine(root,"SavedGames");
-			_storagePath = Path.Combine(saved,name);
+			//var root = StorageDevice.StorageRoot;
+			MonoMac.Foundation.NSUrl[] urls = MonoMac.Foundation.NSFileManager.DefaultManager.GetUrls(MonoMac.Foundation.NSSearchPathDirectory.ApplicationSupportDirectory,
+			                                                                     MonoMac.Foundation.NSSearchPathDomain.User);
+			var appSupportDir = urls[0].Path;
+			
+			var bundleName = MonoMac.Foundation.NSBundle.MainBundle.InfoDictionary.ObjectForKey(new MonoMac.Foundation.NSString("CFBundleName")).ToString();
+
+			var path = Path.Combine(appSupportDir, bundleName);
+			
+			
+			//var saved = Path.Combine(root,"SavedGames");
+			_storagePath = Path.Combine(path,name);
 			
 			var playerSave = string.Empty;
 			if (playerIndex.HasValue) {
-				playerSave = Path.Combine(root,"Player" + (int)playerIndex.Value);
+				playerSave = Path.Combine(path,"Player" + (int)playerIndex.Value);
 			}
 			
 			if (!string.IsNullOrEmpty(playerSave))
-				_storagePath = Path.Combine(root,"Player" + (int)playerIndex);
+				_storagePath = Path.Combine(path,"Player" + (int)playerIndex);
 			
 				
 			// Creathe the "device" if need be

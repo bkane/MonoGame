@@ -373,7 +373,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		public void SetRenderTargets (params RenderTargetBinding[] renderTargets) 
 		{
-			
+			CheckErrors("SetRenderTargets");
 			currentRenderTargets = renderTargets;
 			
 			if (currentRenderTargets != null) {
@@ -388,13 +388,14 @@ namespace Microsoft.Xna.Framework.Graphics
 				
 				renderBufferIDs = new int[currentRenderTargets.Length];
 				GL.GenRenderbuffers(currentRenderTargets.Length, renderBufferIDs);
+				CheckErrors("GenRenderbuffers");
 				
 				for (int i = 0; i < currentRenderTargets.Length; i++) {
 					RenderTarget2D target = (RenderTarget2D)currentRenderTargets[i].RenderTarget;
 
 					// create a renderbuffer object to store depth info
 					GL.BindRenderbuffer(RenderbufferTarget.RenderbufferExt, renderBufferIDs[i]);
-
+					CheckErrors("BindRenderBuffer");
 					ClearOptions clearOptions = ClearOptions.Target;
 					
 					if (target.DepthStencilFormat != DepthFormat.None)
@@ -404,8 +405,9 @@ namespace Microsoft.Xna.Framework.Graphics
 
 					// create framebuffer
 					GL.GenFramebuffers(1, out frameBufferIDs[i]);
+					CheckErrors("GenFramebuffers");
 					GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, frameBufferIDs[i]);
-
+					CheckErrors("BindFramebuffer");
 					// attach stencil buffer
 					switch (target.DepthStencilFormat) {
 					case DepthFormat.Depth16:
@@ -433,10 +435,12 @@ namespace Microsoft.Xna.Framework.Graphics
 							target.Width, target.Height);
 						break;
 					}
+					CheckErrors("RenderBufferStorage");
 					
 					// attach the texture to FBO color attachment point
 					GL.FramebufferTexture2D(FramebufferTarget.FramebufferExt, FramebufferAttachment.ColorAttachment0,
 						TextureTarget.Texture2D, target.ID,0);
+					CheckErrors("FramebufferTexture2D");
 					
 					if (target.DepthStencilFormat != DepthFormat.None)
 					{
@@ -449,6 +453,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						Clear (clearOptions, Color.Transparent, 0, 0);
 					
 					GL.BindRenderbuffer(RenderbufferTarget.RenderbufferExt, 0);
+					CheckErrors("BindRenderbuffer 0");
 				}
 				
 				FramebufferErrorCode status = GL.CheckFramebufferStatus(FramebufferTarget.FramebufferExt);
@@ -476,6 +481,20 @@ namespace Microsoft.Xna.Framework.Graphics
 				// now we set our viewport to the new rendertarget viewport just created.
 				Viewport = renderTargetViewPort;
 			}						
+		}
+		
+		protected void CheckErrors(String context)
+		{
+			var error = GL.GetError();
+			
+			while(error != ErrorCode.NoError)
+			{
+				Console.WriteLine("glError! {0} context: {1} stack: {2}",
+				                                   error.ToString(),
+				                  					context,
+				                                   System.Environment.StackTrace);
+				error = GL.GetError();
+			}
 		}
 
 		public RenderTargetBinding[] GetRenderTargets ()

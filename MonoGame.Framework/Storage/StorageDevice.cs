@@ -392,7 +392,7 @@ namespace Microsoft.Xna.Framework.Storage
 		internal static string StorageRoot
 		{
 			get {
-				return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+				return Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 			}
 		}
 	}
