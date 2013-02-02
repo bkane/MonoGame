@@ -120,8 +120,17 @@ namespace Microsoft.Xna.Framework.Graphics
 			generateOpenGLTexture ();
 		}
 		
+		private bool IsPOT(ulong num)
+		{
+			return (num != 0) && ((num & (num - 1)) == 0);
+		}
+		
 		private void generateOpenGLTexture ()
 		{
+#if DEBUG
+			System.Diagnostics.Debug.Assert(IsPOT((ulong)_width));
+			System.Diagnostics.Debug.Assert(IsPOT((ulong)_height));
+#endif
 			// modeled after this
 			// http://steinsoft.net/index.php?site=Programming/Code%20Snippets/OpenGL/no9
 			

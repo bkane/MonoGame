@@ -18,10 +18,13 @@ namespace Microsoft.Xna.Framework.Graphics
 		RasterizerState _rasterizerState;		
 		Effect _effect;	
 		SpriteEffect spriteEffect;
+		SpriteEffect brownSpriteEffect;
 		Matrix _matrix;
 		Rectangle tempRect = new Rectangle (0,0,0,0);
 		Vector2 texCoordTL = new Vector2 (0,0);
 		Vector2 texCoordBR = new Vector2 (0,0);
+
+		public static bool UseBrownEffect;
 
 		public SpriteBatch (GraphicsDevice graphicsDevice)
 		{
@@ -30,7 +33,8 @@ namespace Microsoft.Xna.Framework.Graphics
 			}	
 
 			this.graphicsDevice = graphicsDevice;
-			spriteEffect = new SpriteEffect (this.graphicsDevice);	
+			spriteEffect = new SpriteEffect (this.graphicsDevice);
+			brownSpriteEffect = new SpriteEffect(this.graphicsDevice, true);
 			_batcher = new SpriteBatcher ();
 		}
 
@@ -41,7 +45,6 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		public void Begin (SpriteSortMode sortMode, BlendState blendState, SamplerState samplerState, DepthStencilState depthStencilState, RasterizerState rasterizerState, Effect effect, Matrix transformMatrix)
 		{
-
 			// defaults
 			_sortMode = sortMode;
 			_blendState = blendState ?? BlendState.AlphaBlend;
@@ -73,7 +76,6 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		public void End ()
 		{	
-
 			// apply the custom effect if there is one
 			if (_effect != null) {
 				_effect.CurrentTechnique.Passes [0].Apply ();
@@ -114,8 +116,7 @@ namespace Microsoft.Xna.Framework.Graphics
 //			}
 			graphicsDevice.BlendState = _blendState;
 			graphicsDevice.SetGraphicsStates();
-			
-			
+
 			// set camera
 			GL.MatrixMode (MatrixMode.Projection);
 			GL.LoadIdentity ();		
@@ -167,7 +168,6 @@ namespace Microsoft.Xna.Framework.Graphics
 			}
 
 			GL.LoadMatrix (ref _matrix.M11);
-			
 
 			// Initialize OpenGL states (ideally move this to initialize somewhere else)
 			GLStateManager.SetDepthStencilState(_depthStencilState);
@@ -187,9 +187,19 @@ namespace Microsoft.Xna.Framework.Graphics
 			GL.Enable (EnableCap.CullFace);
 			GL.FrontFace (FrontFaceDirection.Cw);
 			GL.Color4 (1.0f, 1.0f, 1.0f, 1.0f);
+
+			if(UseBrownEffect)
+			{
+				brownSpriteEffect.CurrentTechnique.Passes [0].Apply ();
+			}
+			else
+			{
+				spriteEffect.CurrentTechnique.Passes [0].Apply ();
+			}
 			
 			_batcher.DrawBatch (_sortMode, _samplerState);
-	
+
+
 			// Disable Scissor Tests if necessary
 			if (this.graphicsDevice.RasterizerState.ScissorTestEnable) {
 				GL.Disable (EnableCap.ScissorTest);
@@ -203,15 +213,10 @@ namespace Microsoft.Xna.Framework.Graphics
 				GL.UseProgram (0);
 				_effect = null;
 			}
-			
-			spriteEffect.CurrentTechnique.Passes [0].Apply ();
 
-			var error = GL.GetError();
-			while (error != ErrorCode.NoError)
-			{
-				Console.WriteLine("GLError: " + error);
-				error = GL.GetError();
-			}
+
+
+			GraphicsDevice.CheckErrors("SpriteBatch.End()");
 			
 			graphicsDevice.UnsetGraphicsStates();
 		}
@@ -432,7 +437,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					(float)Math.Cos (rotation), 
 					color, 
 					texCoordTL, 
-					texCoordBR);			
+					texCoordBR);	
 		}
 
 		public void Draw (Texture2D texture, Vector2 position, Rectangle? sourceRectangle, Color color)
@@ -660,7 +665,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						texCoordBR);
 
 				p.X += (g.Kerning.Y + g.Kerning.Z + spriteFont.Spacing);
-			}			
+			}	
 		}
 
 		public void DrawString (SpriteFont spriteFont, 
@@ -726,7 +731,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						texCoordBR);
 
 				p.X += (g.Kerning.Y + g.Kerning.Z + spriteFont.Spacing);
-			}			
+			}	
 		}
 
 		public void DrawString (SpriteFont spriteFont, 
@@ -739,7 +744,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			SpriteEffects effects,
 			float depth)
 		{			
-			if (spriteFont == null) {
+  			if (spriteFont == null) {
 				throw new ArgumentException ("spriteFont");
 			}
 
@@ -779,6 +784,8 @@ namespace Microsoft.Xna.Framework.Graphics
 					texCoordTL.X = temp;
 				}
 
+				p.X += g.Kerning.X;
+
 				item.Set (position.X, 
 						position.Y, 
 						p.X * scale.X, 
@@ -792,7 +799,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						texCoordBR);
 
 				p.X += (g.Kerning.Y + g.Kerning.Z + spriteFont.Spacing);
-			}			
+			}	
 		}
 
 		public void DrawString (SpriteFont spriteFont, StringBuilder text, Vector2 position, Color color)

@@ -483,10 +483,10 @@ namespace Microsoft.Xna.Framework.Graphics
 			}						
 		}
 		
-		protected void CheckErrors(String context)
+		public static void CheckErrors(String context)
 		{
 			var error = GL.GetError();
-			
+
 			while(error != ErrorCode.NoError)
 			{
 				Console.WriteLine("glError! {0} context: {1} stack: {2}",

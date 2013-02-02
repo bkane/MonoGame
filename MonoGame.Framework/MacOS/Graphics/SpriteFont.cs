@@ -65,6 +65,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
         public Vector2 MeasureString(string text)
         {
+			/*
            	Vector2 v = Vector2.Zero;
             float xoffset=0;
             float yoffset=0;
@@ -88,6 +89,61 @@ namespace Microsoft.Xna.Framework.Graphics
                 if (xoffset > v.X) v.X = xoffset;
             }
             return v;
+*/
+
+			Vector2 size = Vector2.Zero;
+			size.Y = LineSpacing;
+			float maxX = 0f;
+			int numLines = 0;
+			float z = 0f;
+			bool newLine = true;
+
+			for(int i = 0; i < text.Length; i++)
+			{
+				char c = text[i];
+
+				if (c != '\r')
+				{
+					if (c == '\n')
+					{
+						size.X += Math.Max (z, 0f);
+						z = 0f;
+						maxX = Math.Max (size.X, maxX);
+						size = Vector2.Zero; //reset
+						size.Y = LineSpacing;
+						newLine = true;
+						numLines++;
+					}
+					else
+					{
+                		GlyphData g = characterData[c];	
+						Vector3 kerning = new Vector3(g.Kerning.X, g.Kerning.Y, g.Kerning.Z);
+
+						if (newLine)
+						{
+							kerning.X = Math.Max(kerning.X, 0f);
+						}
+						else
+						{
+							size.X += Spacing + z;
+						}
+
+						size.X += kerning.X + kerning.Y;
+
+						z = kerning.Z;
+
+						size.Y = Math.Max(size.Y, (float) g.Cropping.Height);
+						newLine = false;
+					}
+				}
+			}
+
+			size.X += Math.Max (z, 0f);
+			size.Y += numLines * LineSpacing;
+			size.X = Math.Max(size.X, maxX);
+
+			return size;
+
         }
 
         public Vector2 MeasureString(StringBuilder text)
